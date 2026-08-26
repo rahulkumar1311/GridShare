@@ -1,0 +1,4 @@
+[build]
+  base = "gridshare/frontend"
+  publish = "dist"
+  command = "npm install && npm run build"

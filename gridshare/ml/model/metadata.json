@@ -1,0 +1,28 @@
+{
+  "model_file": "energy_demand_rf.joblib",
+  "features": [
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "sin_hour",
+    "cos_hour",
+    "lag_1h",
+    "lag_2h",
+    "lag_3h",
+    "rolling_mean_3h",
+    "rolling_std_3h",
+    "generation_kw",
+    "grid_price"
+  ],
+  "metrics": {
+    "mae_kw": 0.1164,
+    "rmse_kw": 0.1526,
+    "r2_score": 0.9779,
+    "mape_pct": 4.54,
+    "test_samples": 1436,
+    "model_type": "RandomForestRegressor (Baseline)",
+    "evaluation_label": "PROTOTYPE_BASELINE",
+    "notes": "Evaluation metrics computed on holdout test partition of simulated community telemetry."
+  },
+  "model_version": "random_forest_v1.0"
+}

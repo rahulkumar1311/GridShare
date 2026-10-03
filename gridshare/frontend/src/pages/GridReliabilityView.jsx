@@ -413,3 +413,123 @@ export default function GridReliabilityView() {
       </div>
 
       {/* 4. Section B: Time-Series Recharts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Chart 1: Solar Forecast vs Actual Simulated Flow */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Renewable Generation: Forecast vs. Actual (kW)
+              </h3>
+              <p className="text-[10.5px] text-slate-500">
+                Diurnal solar bell curve with cloud attenuation & ramp-rate smoothing
+              </p>
+            </div>
+            <Sun className="h-4 w-4 text-amber-500" />
+          </div>
+
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="solarGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" unit="kW" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', fontSize: '11px', borderRadius: '8px' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
+                <Area
+                  type="monotone"
+                  dataKey="forecastSolar"
+                  name="Forecast Solar (kW)"
+                  stroke="#d97706"
+                  fill="url(#solarGrad)"
+                  strokeWidth={2}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="actualSolar"
+                  name="Simulated Solar (kW)"
+                  stroke="#b45309"
+                  strokeDasharray="4 4"
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 2: Demand Forecast & Uncertainty Interval */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Neighbourhood Demand Forecast & Uncertainty (kW)
+              </h3>
+              <p className="text-[10.5px] text-slate-500">
+                Random Forest ensemble prediction with decision-tree variance (±σ) and essential load floor
+              </p>
+            </div>
+            <Cpu className="h-4 w-4 text-indigo-500" />
+          </div>
+
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="uncertaintyGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" unit="kW" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', fontSize: '11px', borderRadius: '8px' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
+                <Area
+                  type="monotone"
+                  dataKey="demandUpper"
+                  name="Uncertainty (+σ)"
+                  stroke="transparent"
+                  fill="url(#uncertaintyGrad)"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="forecastDemand"
+                  name="Forecast Total Demand (kW)"
+                  stroke="#4f46e5"
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="essentialDemand"
+                  name="Essential Load Baseline (kW)"
+                  stroke="#059669"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 3: Baseline vs. Optimized Grid Import */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Peak Shaving: Baseline vs. Optimized Grid Import (kW)
+              </h3>
+              <p className="text-[10.5px] text-slate-500">
+                Storage dispatch and flexible load shifting shave peak utility import

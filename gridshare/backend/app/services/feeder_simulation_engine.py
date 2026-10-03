@@ -90,5 +90,7 @@ class BatteryState:
         chem_energy_drawn = electrical_energy_delivered / self.discharge_efficiency if self.discharge_efficiency > 0 else 0.0
         loss_kwh = chem_energy_drawn - electrical_energy_delivered
 
-        self.current_energy_kwh = max(self.min_reserve_kwh, self.current_energy_kwh - chem_energy_drawn)
+        if chem_energy_drawn > 1e-9:
+            self.current_energy_kwh = max(self.min_reserve_kwh, self.current_energy_kwh - chem_energy_drawn)
         return actual_power_kw, electrical_energy_delivered, loss_kwh
+

@@ -285,3 +285,66 @@ class FeederForecastOptimizerService:
                         "target_power_kw": grid_export_kw,
                         "energy_kwh": round(grid_export_kw * dt, 3),
                         "reason": f"Feeding {grid_export_kw} kW residual clean solar into utility grid via feed-in tariff.",
+                        "financial_impact_inr": round(grid_export_kw * dt * grid_export_feedin_per_kwh, 2),
+                        "financial_benefit_description": f"Earns ₹{grid_export_feedin_per_kwh}/kWh feed-in revenue.",
+                        "constraints_checked": f"Transformer capacity ({max_transformer_kw} kW).",
+                        "essential_load_protected": True,
+                        "forecast_uncertainty_kw": iv["aggregate_uncertainty_kw"],
+                    })
+
+            else:
+                # DEFICIT INTERVAL: Demand exceeds solar!
+                deficit_kw = abs(raw_net)
+                available_batt = sim_battery.available_energy_kwh
+
+                # Step B1: Discharge Community ESS (subject to reserve floor and power rating)
+                if available_batt > 0.1 and sim_battery.soc_pct > sim_battery.min_reserve_pct:
+                    dis_p, delivered, loss = sim_battery.discharge(deficit_kw, dt)
+                    battery_discharge_kw = dis_p
+                    total_battery_discharged_kwh += delivered
+                    rem_deficit = max(0.0, deficit_kw - dis_p)
+
+                    recommendations.append({
+                        "interval": t_label,
+                        "step_index": t,
+                        "action_type": "DISCHARGE_COMMUNITY_ESS",
+                        "target_power_kw": dis_p,
+                        "energy_kwh": round(delivered, 3),
+                        "reason": f"Discharging {dis_p} kW from Community ESS to shave deficit (SOC {start_soc:.1f}% -> {sim_battery.soc_pct:.1f}%).",
+                        "financial_impact_inr": round(delivered * tariff_in, 2),
+                        "financial_benefit_description": f"Directly avoids peak grid import at ₹{tariff_in:.2f}/kWh.",
+                        "constraints_checked": f"Reserve floor guarded >= {sim_battery.min_reserve_pct}% ({sim_battery.min_reserve_kwh} kWh), max discharge rate ({sim_battery.max_discharge_power_kw} kW).",
+                        "essential_load_protected": True,
+                        "forecast_uncertainty_kw": iv["aggregate_uncertainty_kw"],
+                    })
+                else:
+                    rem_deficit = deficit_kw
+
+                # Step B2: Check Shortfall after Battery Support
+                if rem_deficit > 0.001:
+                    # Detect Shortfall
+                    detected_shortfalls.append({
+                        "interval": t_label,
+                        "step_index": t,
+                        "shortfall_kw": rem_deficit,
+                        "hour": iv["hour_of_day"],
+                        "essential_demand_kw": iv["forecast_essential_demand_kw"],
+                        "flexible_demand_kw": iv["forecast_flexible_demand_kw"],
+                        "battery_soc_at_shortfall": sim_battery.soc_pct,
+                    })
+
+                    # Step B3: Flexible Load Shifting (if enabled and eligible candidates exist)
+                    if allow_flexible_load_shift and len(candidate_shift_hours) > 0 and iv["forecast_flexible_demand_kw"] > 0.2:
+                        # Find the first candidate that still has positive headroom
+                        eligible_candidate = None
+                        for cand in candidate_shift_hours:
+                            if cand["surplus_headroom_kw"] > 0.1:
+                                eligible_candidate = cand
+                                break
+
+                        if eligible_candidate is not None:
+                            shiftable_amount = min(rem_deficit, iv["forecast_flexible_demand_kw"], eligible_candidate["surplus_headroom_kw"])
+                            if shiftable_amount > 0.1:
+                                shifted_flex_kw = shiftable_amount
+                                rem_deficit = max(0.0, rem_deficit - shiftable_amount)
+                                total_shifted_load_kwh += shiftable_amount * dt

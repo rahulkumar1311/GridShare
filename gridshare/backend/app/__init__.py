@@ -15,6 +15,7 @@ from .routes.dashboard_routes import dashboard_bp
 from .routes.telemetry_routes import telemetry_bp
 from .routes.market_routes import market_bp
 from .routes.demo_routes import demo_bp
+from .routes.feeder_routes import feeder_bp
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -36,6 +37,7 @@ def create_app(config_class=Config):
     app.register_blueprint(telemetry_bp)
     app.register_blueprint(market_bp)
     app.register_blueprint(demo_bp)
+    app.register_blueprint(feeder_bp)
 
     # Global Error Handlers
     @app.errorhandler(404)

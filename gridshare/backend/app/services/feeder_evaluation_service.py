@@ -183,3 +183,128 @@ class FeederEvaluationService:
             total_flexible_kw = 0.0
 
             for h in households:
+                solar_kw = h.solar_capacity_kw * diurnal_solar * irr
+                ess_kw = h.base_essential_kw * d_mult
+                flex_kw = h.base_flexible_kw * d_mult
+                tot_kw = ess_kw + flex_kw
+
+                total_solar_kw += solar_kw
+                total_essential_kw += ess_kw
+                total_flexible_kw += flex_kw
+
+                hh_inputs.append({
+                    "household_id": h.id,
+                    "solar_kw": solar_kw,
+                    "essential_demand_kw": ess_kw,
+                    "flexible_demand_kw": flex_kw,
+                    "total_demand_kw": tot_kw,
+                })
+
+            time_series.append({
+                "step_index": step,
+                "hour_of_day": hour,
+                "duration_hours": dt,
+                "import_tariff": import_tariff,
+                "export_tariff": export_tariff,
+                "total_solar_kw": total_solar_kw,
+                "total_essential_kw": total_essential_kw,
+                "total_flexible_kw": total_flexible_kw,
+                "total_demand_kw": total_essential_kw + total_flexible_kw,
+                "households": hh_inputs,
+            })
+
+        return time_series
+
+    @classmethod
+    def simulate_baseline_strategy(
+        cls,
+        scenario: ScenarioDefinition,
+        time_series: List[Dict[str, Any]],
+        households: List[HouseholdNodeConfig],
+    ) -> Dict[str, Any]:
+        """
+        Executes BASELINE Strategy:
+        - Local solar self-use enabled behind-the-meter.
+        - Flexible loads are NOT shifted (run at customer's native scheduled times).
+        - P2P energy trading is NOT coordinated (excess local solar is simply injected as export).
+        - Community battery is UNMANAGED / IDLE (no predictive lookahead or TOU dispatch).
+        - Essential load is not segregated during shedding: transformer capacity limits drop loads indiscriminately.
+        """
+        start_time = time.perf_counter()
+        dt = scenario.step_duration_hours
+        max_xfmr_kw = scenario.transformer_capacity_kva * 0.95
+
+        # Initialize community battery at scenario initial SOC (remains unmanaged/idle in baseline)
+        comm_battery = BatteryState(
+            id="baseline_comm_battery",
+            capacity_kwh=scenario.battery_capacity_kwh,
+            current_energy_kwh=scenario.battery_capacity_kwh * (scenario.initial_battery_soc / 100.0),
+            min_reserve_pct=scenario.battery_reserve_pct,
+            max_charge_power_kw=scenario.battery_max_power_kw,
+            max_discharge_power_kw=scenario.battery_max_power_kw,
+        )
+
+        steps_output = []
+        for step_data in time_series:
+            t = step_data["step_index"]
+            hour = step_data["hour_of_day"]
+            imp_tariff = step_data["import_tariff"]
+            exp_tariff = step_data["export_tariff"]
+
+            total_solar_kw = step_data["total_solar_kw"]
+            total_demand_kw = step_data["total_demand_kw"]
+            total_essential_kw = step_data["total_essential_kw"]
+            total_flexible_kw = step_data["total_flexible_kw"]
+
+            # 1. Household behind-the-meter solar self-use
+            feeder_surplus_kw = 0.0
+            feeder_deficit_kw = 0.0
+            total_solar_self_used_kw = 0.0
+
+            for h_in in step_data["households"]:
+                sol = h_in["solar_kw"]
+                dem = h_in["total_demand_kw"]
+                self_used = min(sol, dem)
+                total_solar_self_used_kw += self_used
+
+                surplus = sol - self_used
+                deficit = dem - self_used
+
+                feeder_surplus_kw += surplus
+                feeder_deficit_kw += deficit
+
+            # In uncoordinated baseline, community battery is idle
+            comm_batt_chg_kw = 0.0
+            comm_batt_dis_kw = 0.0
+
+            # Transformer exchange
+            grid_import_kw = 0.0
+            grid_export_kw = 0.0
+            unmet_demand_kw = 0.0
+            curtailed_solar_kw = 0.0
+
+            # Net position of the feeder
+            net_deficit_kw = feeder_deficit_kw
+            net_surplus_kw = feeder_surplus_kw
+
+            # Even in uncoordinated baseline, electricity on the same low-voltage feeder
+            # naturally self-balances aggregate prosumer injection with consumer load:
+            feeder_natural_offset = min(net_surplus_kw, net_deficit_kw)
+            rem_deficit_kw = net_deficit_kw - feeder_natural_offset
+            rem_surplus_kw = net_surplus_kw - feeder_natural_offset
+
+            if rem_deficit_kw > 1e-9:
+                grid_import_kw = min(rem_deficit_kw, max_xfmr_kw)
+                unmet_demand_kw = max(0.0, rem_deficit_kw - grid_import_kw)
+            elif rem_surplus_kw > 1e-9:
+                grid_export_kw = min(rem_surplus_kw, max_xfmr_kw)
+                curtailed_solar_kw = max(0.0, rem_surplus_kw - grid_export_kw)
+
+            demand_served_kw = max(0.0, total_demand_kw - unmet_demand_kw)
+
+            # In baseline, load shedding is unmanaged: if unmet demand occurs,
+            # essential load is violated proportionally
+            if unmet_demand_kw > 1e-6 and total_demand_kw > 1e-6:
+                unmet_essential_kw = unmet_demand_kw * (total_essential_kw / total_demand_kw)
+            else:
+                unmet_essential_kw = 0.0

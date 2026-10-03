@@ -208,3 +208,29 @@ class FeederForecastOptimizerService:
                 "forecast_flexible_demand_kw": t_flexible_kw,
                 "forecast_solar_kw": t_solar_kw,
                 "raw_net_balance_kw": raw_net_balance_kw,
+                "aggregate_uncertainty_kw": aggregate_uncertainty_kw,
+                "local_prosumer_surplus_kw": round(prosumer_surplus_kw, 3),
+                "local_consumer_deficit_kw": round(consumer_deficit_kw, 3),
+                "battery_start_soc": sim_battery.soc_pct,
+                "battery_start_stored_kwh": round(sim_battery.current_energy_kwh, 3),
+            })
+
+        # Phase 2: Sequential DER & Battery Dispatch
+        for t, iv in enumerate(intervals_summary):
+            raw_net = iv["raw_net_balance_kw"]
+            tariff_in = iv["active_import_tariff"]
+            t_label = iv["time_label"]
+            start_soc = sim_battery.soc_pct
+            start_kwh = sim_battery.current_energy_kwh
+
+            # Step A: Local P2P Coordination
+            p2p_cleared_kw = round(min(iv["local_prosumer_surplus_kw"], iv["local_consumer_deficit_kw"]), 3)
+            if p2p_cleared_kw > 0.05:
+                total_p2p_reallocated_kwh += p2p_cleared_kw * dt
+                recommendations.append({
+                    "interval": t_label,
+                    "step_index": t,
+                    "action_type": "P2P_LOCAL_MATCH",
+                    "target_power_kw": p2p_cleared_kw,
+                    "energy_kwh": round(p2p_cleared_kw * dt, 3),
+                    "reason": f"Coordinated {p2p_cleared_kw} kW local peer matching between prosumers and consumers.",

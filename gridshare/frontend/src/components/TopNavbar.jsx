@@ -16,6 +16,7 @@ import {
   BatteryCharging,
   Play,
   Menu,
+  Activity,
   X
 } from 'lucide-react';
 
@@ -40,6 +41,7 @@ export default function TopNavbar({
     { name: 'Battery', path: '/battery', icon: BatteryCharging },
     { name: 'Optimizer', path: '/optimize', icon: Sliders },
     { name: 'AI & Forecasts', path: '/ai', icon: Cpu },
+    { name: 'Grid Reliability', path: '/grid', icon: Activity, highlight: true },
     { name: 'My Home', path: '/my-home', icon: Home },
     { name: 'Ledger', path: '/transactions', icon: ReceiptText },
   ];

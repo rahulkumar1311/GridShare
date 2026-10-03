@@ -408,3 +408,50 @@ class FeederForecastOptimizerService:
 
         # Calculate estimated savings vs unoptimized baseline using hourly active TOU tariffs
         unoptimized_cost = sum(
+            iv["forecast_demand_kw"] * dt * iv["active_import_tariff"]
+            for iv in intervals_summary
+        )
+        optimized_cost = sum(
+            (iv["allocated_grid_import_kw"] * dt * iv["active_import_tariff"])
+            - (iv["allocated_grid_export_kw"] * dt * grid_export_feedin_per_kwh)
+            for iv in intervals_summary
+        )
+        estimated_savings = max(0.0, unoptimized_cost - optimized_cost)
+
+        total_unmet_shortfall_kwh = sum(iv["unmet_shortfall_kw"] * dt for iv in intervals_summary)
+        unmet_intervals = sum(1 for iv in intervals_summary if iv["unmet_shortfall_kw"] > 1e-4)
+
+        return {
+            "status": "SUCCESS",
+            "horizon_hours": horizon_hours,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "model_metadata": {
+                "algorithm": "RandomForestRegressor (n_estimators=100) + Analytical Solar Model",
+                "demand_uncertainty_metric": "Ensemble Tree Standard Deviation (kW)",
+                "solar_model": "Diurnal Solar Geometry Model",
+                "uncertainty_disclosure": (
+                    "Demand forecast uncertainty is directly measured by empirical decision tree variance across "
+                    "the 100-tree Random Forest ensemble. Solar generation is computed analytically from solar geometry."
+                ),
+            },
+            "kpi_summary": {
+                "total_forecast_demand_kwh": round(total_forecast_demand_kwh, 3),
+                "total_forecast_solar_kwh": round(total_forecast_solar_kwh, 3),
+                "total_battery_charged_kwh": round(total_battery_charged_kwh, 3),
+                "total_battery_discharged_kwh": round(total_battery_discharged_kwh, 3),
+                "total_p2p_reallocated_kwh": round(total_p2p_reallocated_kwh, 3),
+                "total_grid_imported_kwh": round(total_grid_imported_kwh, 3),
+                "total_grid_exported_kwh": round(total_grid_exported_kwh, 3),
+                "total_shifted_flexible_load_kwh": round(total_shifted_load_kwh, 3),
+                "total_unmet_shortfall_kwh": round(total_unmet_shortfall_kwh, 3),
+                "unmet_shortfall_intervals": unmet_intervals,
+                "estimated_cost_savings_inr": round(estimated_savings, 2),
+                "essential_loads_protected": all(iv["essential_demand_fully_served"] for iv in intervals_summary),
+            },
+            "shortfalls_detected": {
+                "count": len(detected_shortfalls),
+                "events": detected_shortfalls,
+            },
+            "recommendations": recommendations,
+            "schedule_by_interval": intervals_summary,
+        }

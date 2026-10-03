@@ -55,6 +55,16 @@ export const api = {
   getTrades: (limit = 50) => apiClient.get('/trades', { params: { limit } }),
   postTelemetry: (data) => apiClient.post('/telemetry', data),
 
+  // Feeder Reliability & Intermittency (Schneider Electric Challenge 03)
+  getFeederStatus: (params) => apiClient.get('/feeder/status', { params }),
+  getFeederReliability: (params) => apiClient.get('/feeder/reliability', { params }),
+  simulateFeeder: (data) => apiClient.post('/feeder/simulate', data),
+  getFeederScenarios: () => apiClient.get('/feeder/scenarios'),
+  getFeederForecast: (params) => apiClient.get('/feeder/forecast', { params }),
+  optimizeFeederForecast: (data) => apiClient.post('/feeder/optimize-forecast', data),
+  getFeederEvaluation: () => apiClient.get('/feeder/evaluation'),
+  runFeederEvaluation: () => apiClient.post('/feeder/evaluation'),
+
   // Demo Mode Endpoints
   runDemoScenario: () => apiClient.post('/demo/run-scenario'),
   resetDemo: () => apiClient.post('/demo/reset'),

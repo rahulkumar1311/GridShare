@@ -234,3 +234,54 @@ class FeederForecastOptimizerService:
                     "target_power_kw": p2p_cleared_kw,
                     "energy_kwh": round(p2p_cleared_kw * dt, 3),
                     "reason": f"Coordinated {p2p_cleared_kw} kW local peer matching between prosumers and consumers.",
+                    "financial_impact_inr": round(p2p_cleared_kw * dt * (tariff_in - p2p_clearing_tariff_per_kwh), 2),
+                    "financial_benefit_description": f"Saves ₹{(tariff_in - p2p_clearing_tariff_per_kwh):.2f}/kWh vs utility grid import.",
+                    "constraints_checked": "Physical prosumer surplus >= P2P matched volume within feeder.",
+                    "essential_load_protected": True,
+                    "forecast_uncertainty_kw": iv["aggregate_uncertainty_kw"],
+                })
+
+            # Step B: Deficit Mitigation or Surplus Capture
+            battery_charge_kw = 0.0
+            battery_discharge_kw = 0.0
+            grid_import_kw = 0.0
+            grid_export_kw = 0.0
+            shifted_flex_kw = 0.0
+            unmet_shortfall_kw = 0.0
+
+            if raw_net > 0.001:
+                # SURPLUS INTERVAL: Charge Shared Battery
+                headroom = sim_battery.headroom_kwh
+                if headroom > 0.1 and sim_battery.soc_pct < 98.0:
+                    ch_p, stored, loss = sim_battery.charge(raw_net, dt)
+                    battery_charge_kw = ch_p
+                    total_battery_charged_kwh += stored
+                    residual_surplus = max(0.0, raw_net - ch_p)
+
+                    recommendations.append({
+                        "interval": t_label,
+                        "step_index": t,
+                        "action_type": "CHARGE_COMMUNITY_ESS",
+                        "target_power_kw": ch_p,
+                        "energy_kwh": round(stored, 3),
+                        "reason": f"Capturing {ch_p} kW midday solar surplus into community ESS (SOC {start_soc:.1f}% -> {sim_battery.soc_pct:.1f}%).",
+                        "financial_impact_inr": round(stored * (grid_peak_tariff_per_kwh - grid_export_feedin_per_kwh), 2),
+                        "financial_benefit_description": f"Arbitrage: Stores surplus instead of feed-in (₹{grid_export_feedin_per_kwh}/kWh) to offset peak grid (₹{grid_peak_tariff_per_kwh}/kWh).",
+                        "constraints_checked": f"Capacity headroom ({headroom:.1f} kWh), max charge rate ({sim_battery.max_charge_power_kw} kW), 95% charge efficiency.",
+                        "essential_load_protected": True,
+                        "forecast_uncertainty_kw": iv["aggregate_uncertainty_kw"],
+                    })
+                else:
+                    residual_surplus = raw_net
+
+                # Export remaining surplus to grid
+                if residual_surplus > 0.001:
+                    grid_export_kw = min(residual_surplus, max_transformer_kw)
+                    total_grid_exported_kwh += grid_export_kw * dt
+                    recommendations.append({
+                        "interval": t_label,
+                        "step_index": t,
+                        "action_type": "EXPORT_GRID",
+                        "target_power_kw": grid_export_kw,
+                        "energy_kwh": round(grid_export_kw * dt, 3),
+                        "reason": f"Feeding {grid_export_kw} kW residual clean solar into utility grid via feed-in tariff.",

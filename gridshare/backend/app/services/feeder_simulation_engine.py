@@ -378,3 +378,16 @@ class FeederSimulationEngine:
         # In case of unmet demand, curtail flexible loads first
         demand_served_kw = max(0.0, total_demand_req_kw - unmet_demand_kw)
 
+        # Step 6: Electrical & Voltage Physics (LinDistFlow Approximation)
+        net_feeder_flow_kw = grid_import_kw - grid_export_kw
+        transformer_loading_pct = (abs(net_feeder_flow_kw) / max(0.01, max_transformer_active_kw)) * 100.0
+
+        q_feeder_kvar = net_feeder_flow_kw * math.tan(math.acos(self.config.power_factor))
+        delta_v_volts = (
+            (self.config.line_resistance_ohms * net_feeder_flow_kw * 1000.0 +
+             self.config.line_reactance_ohms * q_feeder_kvar * 1000.0) /
+            (self.config.nominal_voltage_v * 1000.0)
+        )
+        feeder_bus_voltage_v = self.config.nominal_voltage_v - delta_v_volts
+        voltage_pu = feeder_bus_voltage_v / self.config.nominal_voltage_v
+

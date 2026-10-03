@@ -4,6 +4,7 @@ from gridshare.backend.app.services.optimization_service import OptimizationServ
 optimization_bp = Blueprint("optimization", __name__)
 
 @optimization_bp.route("/api/optimization/run", methods=["POST"])
+@optimization_bp.route("/api/optimize", methods=["POST"])
 def run_optimization():
     """Trigger the GridShare Rule & Optimization Engine."""
     result = OptimizationService.run_optimization_engine()

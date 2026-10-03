@@ -135,3 +135,30 @@ def optimize_feeder_forecast():
     except (ValueError, TypeError):
         initial_soc = 40.0
     try:
+        battery_cap = float(data.get("battery_capacity_kwh", 50.0))
+    except (ValueError, TypeError):
+        battery_cap = 50.0
+    allow_shift = bool(data.get("allow_flexible_load_shift", True))
+
+    horizon = max(1, min(24, horizon))
+    initial_soc = max(0.0, min(100.0, initial_soc))
+    battery_cap = max(1.0, min(1000.0, battery_cap))
+
+    result = FeederForecastOptimizerService.optimize_feeder_horizon(
+        horizon_hours=horizon,
+        initial_battery_soc=initial_soc,
+        battery_capacity_kwh=battery_cap,
+        allow_flexible_load_shift=allow_shift,
+    )
+    return jsonify(result), 200
+
+@feeder_bp.route("/api/feeder/evaluation", methods=["GET", "POST"])
+def get_feeder_evaluation():
+    """
+    Returns full reproducible evaluation suite comparing Baseline vs GridShare
+    across all 6 deterministic scenarios with 11 standardized metrics.
+    """
+    from gridshare.backend.app.services.feeder_evaluation_service import FeederEvaluationService
+    suite_res = FeederEvaluationService.run_full_evaluation_suite()
+    return jsonify(suite_res), 200
+

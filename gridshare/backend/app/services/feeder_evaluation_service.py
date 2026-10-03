@@ -613,3 +613,101 @@ class FeederEvaluationService:
             ("essential_load_violations", "count", "lower_is_better"),
             ("energy_balance_residual_kw", "kW", "lower_is_better"),
         ]
+
+        for key, unit, polarity in metric_keys:
+            b_val = bm[key]
+            g_val = gm[key]
+            abs_diff = round(g_val - b_val, 4)
+
+            # Safe percentage change calculation
+            if abs(b_val) > 1e-6:
+                pct_change = round(((g_val - b_val) / abs(b_val)) * 100.0, 2)
+            else:
+                pct_change = 0.0 if abs(g_val - b_val) < 1e-6 else None
+
+            # Improvement classification
+            if abs_diff == 0.0:
+                verdict = "EQUAL"
+            elif polarity == "lower_is_better":
+                verdict = "IMPROVED" if abs_diff < 0 else "DEGRADED"
+            else:
+                verdict = "IMPROVED" if abs_diff > 0 else "DEGRADED"
+
+            comparison[key] = {
+                "baseline": b_val,
+                "gridshare": g_val,
+                "unit": unit,
+                "abs_diff": abs_diff,
+                "pct_change": pct_change,
+                "verdict": verdict,
+            }
+
+        return {
+            "scenario": {
+                "id": scenario.scenario_id,
+                "name": scenario.name,
+                "description": scenario.description,
+                "duration_hours": scenario.duration_hours,
+                "solar_multiplier": scenario.solar_multiplier,
+                "demand_multiplier": scenario.demand_multiplier,
+                "initial_battery_soc": scenario.initial_battery_soc,
+                "battery_capacity_kwh": scenario.battery_capacity_kwh,
+                "transformer_capacity_kva": scenario.transformer_capacity_kva,
+            },
+            "baseline": baseline_res,
+            "gridshare": gridshare_res,
+            "comparison": comparison,
+        }
+
+    @classmethod
+    def run_full_evaluation_suite(
+        cls,
+        households: Optional[List[HouseholdNodeConfig]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Executes all 6 deterministic scenarios and outputs full evaluation suite.
+        """
+        scenarios = cls.get_standard_scenarios()
+        results = []
+
+        total_runtime_ms = 0.0
+        for sc in scenarios:
+            eval_res = cls.run_scenario_evaluation(sc, households)
+            results.append(eval_res)
+            total_runtime_ms += eval_res["gridshare"]["metrics"]["simulation_runtime_ms"]
+
+        return {
+            "evaluation_title": "GridShare vs Baseline Feeder Reliability Evaluation",
+            "benchmark_context": "Schneider Electric Yuva Yodha 2026 — Challenge 03",
+            "methodology_disclosures": {
+                "simulation_type": "Deterministic multi-node physical feeder model",
+                "conservation_of_energy": "Strictly verified Sources == Sinks (residual < 1e-6 kW)",
+                "zero_denominator_policy": "All division by zero guarded; 0/0 returns 0.0 or N/A",
+                "baseline_definition": "Uncoordinated feeder: local solar self-use enabled, no load shifting, idle community battery, unmanaged shedding.",
+                "gridshare_definition": "Forecast-driven coordination: flexible load shifting, predictive community battery dispatch, 20% reserve floor, priority essential load protection.",
+                "claims_disclaimer": "All figures are deterministic physics simulation outputs. Not fabricated from physical utility sensors.",
+            },
+            "scenario_results": results,
+            "suite_runtime_ms": round(total_runtime_ms, 2),
+        }
+
+
+# Standalone CLI runner
+if __name__ == "__main__":
+    suite = FeederEvaluationService.run_full_evaluation_suite()
+    print("=" * 110)
+    print(" GRIDSHARE REPRODUCIBLE EVALUATION: BASELINE VS GRIDSHARE (CHALLENGE 03) ")
+    print("=" * 110)
+    print(f"{'Scenario':<32} | {'Metric':<25} | {'Baseline':<12} | {'GridShare':<12} | {'Delta':<12} | {'Verdict'}")
+    print("-" * 110)
+
+    for sc in suite["scenario_results"]:
+        sc_name = sc["scenario"]["name"]
+        comp = sc["comparison"]
+        for idx, (m_key, m_data) in enumerate(comp.items()):
+            label = sc_name if idx == 0 else ""
+            b_str = f"{m_data['baseline']} {m_data['unit']}"
+            g_str = f"{m_data['gridshare']} {m_data['unit']}"
+            d_str = f"{m_data['abs_diff']:+} ({m_data['pct_change']}%)" if m_data['pct_change'] is not None else f"{m_data['abs_diff']:+}"
+            print(f"{label:<32} | {m_key:<25} | {b_str:<12} | {g_str:<12} | {d_str:<12} | {m_data['verdict']}")
+        print("-" * 110)

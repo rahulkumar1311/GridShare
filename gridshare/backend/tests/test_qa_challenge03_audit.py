@@ -108,3 +108,63 @@ class TestChallenge03Audit(unittest.TestCase):
             load_multiplier=0.5,
         )
         # Full battery cannot charge further
+        self.assertEqual(step["aggregate_power_kw"]["community_battery_charge_kw"], 0.0)
+        self.assertLessEqual(step["community_battery"]["soc_pct"], 100.0)
+        # Surplus must either export or curtail, not disappear
+        self.assertGreater(step["aggregate_power_kw"]["grid_export_kw"], 0.0)
+        self.assertTrue(step["feeder_reliability"]["energy_balance_conserved"])
+
+    # 4. Empty battery at its reserve floor
+    def test_04_battery_at_reserve_floor_cannot_discharge(self):
+        battery = BatteryState(
+            id="test_batt",
+            capacity_kwh=100.0,
+            current_energy_kwh=20.0,  # Exactly at 20%
+            min_reserve_pct=20.0,
+            max_discharge_power_kw=20.0,
+        )
+        self.assertEqual(battery.available_energy_kwh, 0.0)
+        actual_kw, delivered_kwh, loss = battery.discharge(target_power_kw=15.0, duration_hours=1.0)
+        self.assertEqual(actual_kw, 0.0)
+        self.assertEqual(delivered_kwh, 0.0)
+        self.assertEqual(loss, 0.0)
+        self.assertEqual(battery.current_energy_kwh, 20.0)
+        self.assertEqual(battery.soc_pct, 20.0)
+
+    # 5. Battery maximum charge and discharge power limits
+    def test_05_battery_c_rate_and_inverter_limits(self):
+        battery = BatteryState(
+            id="test_batt",
+            capacity_kwh=100.0,
+            current_energy_kwh=50.0,
+            min_reserve_pct=20.0,
+            max_charge_power_kw=10.0,
+            max_discharge_power_kw=12.0,
+        )
+        # Request 50 kW charge (should clamp to 10 kW)
+        ch_p, _, _ = battery.charge(50.0, 1.0)
+        self.assertEqual(ch_p, 10.0)
+
+        # Request 50 kW discharge (should clamp to 12 kW)
+        dis_p, _, _ = battery.discharge(50.0, 1.0)
+        self.assertEqual(dis_p, 12.0)
+
+    # 6. Invalid or missing forecast inputs
+    def test_06_invalid_or_missing_forecast_inputs(self):
+        # Negative horizon, out of bounds SOC, zero battery capacity
+        opt = FeederForecastOptimizerService.optimize_feeder_horizon(
+            horizon_hours=-5,  # Invalid
+            initial_battery_soc=150.0,  # Out of bounds
+            battery_capacity_kwh=-10.0,  # Invalid
+            transformer_capacity_kva=-5.0,  # Invalid
+        )
+        self.assertEqual(opt["status"], "SUCCESS")
+        # Horizon must be clamped to at least 1
+        self.assertGreaterEqual(opt["horizon_hours"], 1)
+        self.assertLessEqual(opt["horizon_hours"], 24)
+        self.assertIn("kpi_summary", opt)
+
+    # 7. Flexible loads with scheduling constraints & no double-allocation
+    def test_07_flexible_loads_and_no_double_allocation(self):
+        opt = FeederForecastOptimizerService.optimize_feeder_horizon(
+            horizon_hours=12,

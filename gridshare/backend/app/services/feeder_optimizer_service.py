@@ -394,3 +394,17 @@ class FeederForecastOptimizerService:
             total_forecast_demand_kwh += iv["forecast_demand_kw"] * dt
             total_forecast_solar_kwh += iv["forecast_solar_kw"] * dt
 
+            iv.update({
+                "battery_end_soc": sim_battery.soc_pct,
+                "battery_end_stored_kwh": round(sim_battery.current_energy_kwh, 3),
+                "allocated_battery_charge_kw": battery_charge_kw,
+                "allocated_battery_discharge_kw": battery_discharge_kw,
+                "allocated_grid_import_kw": grid_import_kw,
+                "allocated_grid_export_kw": grid_export_kw,
+                "allocated_shifted_load_kw": shifted_flex_kw,
+                "unmet_shortfall_kw": unmet_shortfall_kw,
+                "essential_demand_fully_served": (unmet_shortfall_kw <= iv["forecast_flexible_demand_kw"]),
+            })
+
+        # Calculate estimated savings vs unoptimized baseline using hourly active TOU tariffs
+        unoptimized_cost = sum(

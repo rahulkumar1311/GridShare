@@ -308,3 +308,163 @@ class FeederEvaluationService:
                 unmet_essential_kw = unmet_demand_kw * (total_essential_kw / total_demand_kw)
             else:
                 unmet_essential_kw = 0.0
+
+            # Economics
+            import_cost = (grid_import_kw * dt) * imp_tariff
+            export_rev = (grid_export_kw * dt) * exp_tariff
+            net_cost = import_cost - export_rev
+
+            # Energy balance verification (sources vs sinks)
+            sources = total_solar_kw + comm_batt_dis_kw + grid_import_kw
+            sinks = demand_served_kw + comm_batt_chg_kw + grid_export_kw + curtailed_solar_kw
+            balance_residual = abs(sources - sinks)
+
+            # Renewable self-consumption
+            renewable_self_consumed_kw = total_solar_kw - grid_export_kw - curtailed_solar_kw
+
+            steps_output.append({
+                "step_index": t,
+                "hour_of_day": hour,
+                "total_demand_kw": total_demand_kw,
+                "total_essential_kw": total_essential_kw,
+                "total_flexible_kw": total_flexible_kw,
+                "demand_served_kw": demand_served_kw,
+                "unmet_demand_kw": unmet_demand_kw,
+                "unmet_essential_kw": unmet_essential_kw,
+                "total_solar_kw": total_solar_kw,
+                "renewable_self_consumed_kw": renewable_self_consumed_kw,
+                "curtailed_solar_kw": curtailed_solar_kw,
+                "battery_charge_kw": comm_batt_chg_kw,
+                "battery_discharge_kw": comm_batt_dis_kw,
+                "battery_soc_pct": comm_battery.soc_pct,
+                "grid_import_kw": grid_import_kw,
+                "grid_export_kw": grid_export_kw,
+                "energy_cost_inr": net_cost,
+                "balance_residual_kw": balance_residual,
+                "reserve_violated": comm_battery.soc_pct < (comm_battery.min_reserve_pct - 1e-4),
+                "essential_violated": unmet_essential_kw > 1e-4,
+            })
+
+        runtime_ms = (time.perf_counter() - start_time) * 1000.0
+
+        metrics = cls._calculate_strategy_metrics(steps_output, dt, runtime_ms)
+        return {
+            "strategy": "BASELINE",
+            "description": "Uncoordinated feeder without load shifting or predictive battery dispatch.",
+            "metrics": metrics,
+            "steps": steps_output,
+        }
+
+    @classmethod
+    def simulate_gridshare_strategy(
+        cls,
+        scenario: ScenarioDefinition,
+        time_series: List[Dict[str, Any]],
+        households: List[HouseholdNodeConfig],
+    ) -> Dict[str, Any]:
+        """
+        Executes GRIDSHARE Strategy:
+        - Predictive lookahead coordination.
+        - Flexible load shifting: shifts deferrable loads to midday solar surplus hours (11:00-14:00).
+        - Predictive community battery dispatch: charges from solar surplus, discharges during shortfalls/peak tariffs.
+        - Battery reserve floor (20%) strictly enforced.
+        - Essential load protected: in overload conditions, flexible loads are shed first before touching essential loads.
+        """
+        start_time = time.perf_counter()
+        dt = scenario.step_duration_hours
+        max_xfmr_kw = scenario.transformer_capacity_kva * 0.95
+
+        # Initialize community battery
+        comm_battery = BatteryState(
+            id="gridshare_comm_battery",
+            capacity_kwh=scenario.battery_capacity_kwh,
+            current_energy_kwh=scenario.battery_capacity_kwh * (scenario.initial_battery_soc / 100.0),
+            min_reserve_pct=scenario.battery_reserve_pct,
+            max_charge_power_kw=scenario.battery_max_power_kw,
+            max_discharge_power_kw=scenario.battery_max_power_kw,
+            charge_efficiency=0.95,
+            discharge_efficiency=0.95,
+        )
+
+        # Step 1: Detect surplus intervals (midday solar) to receive shifted flexible loads
+        surplus_hours = []
+        for step_data in time_series:
+            net_est = step_data["total_solar_kw"] - step_data["total_demand_kw"]
+            if net_est > 1.0:
+                surplus_hours.append(step_data["step_index"])
+
+        # Determine flexible load shifts (from peak hours to midday surplus)
+        shifted_loads_kw = [0.0] * len(time_series)
+        received_loads_kw = [0.0] * len(time_series)
+
+        if scenario.allow_load_shifting and len(surplus_hours) > 0:
+            for step_data in time_series:
+                t = step_data["step_index"]
+                hour = step_data["hour_of_day"]
+                # Shift loads during evening peak or high shortfall hours
+                if (17.0 <= hour <= 22.0) and step_data["total_solar_kw"] < step_data["total_demand_kw"]:
+                    # Candidate shiftable load = flexible demand up to 60%
+                    shift_amount = step_data["total_flexible_kw"] * 0.60
+                    if shift_amount > 0.1:
+                        shifted_loads_kw[t] = shift_amount
+                        # Allocate evenly across available surplus hours
+                        for target_h in surplus_hours:
+                            received_loads_kw[target_h] += shift_amount / len(surplus_hours)
+
+        steps_output = []
+        for step_data in time_series:
+            t = step_data["step_index"]
+            hour = step_data["hour_of_day"]
+            imp_tariff = step_data["import_tariff"]
+            exp_tariff = step_data["export_tariff"]
+            is_peak_tariff = (18.0 <= hour <= 22.0)
+
+            total_solar_kw = step_data["total_solar_kw"]
+            base_demand_kw = step_data["total_demand_kw"]
+            total_essential_kw = step_data["total_essential_kw"]
+            total_flexible_kw = step_data["total_flexible_kw"]
+
+            # Adjusted demand after load shift
+            adjusted_flexible_kw = max(0.0, total_flexible_kw - shifted_loads_kw[t] + received_loads_kw[t])
+            adjusted_demand_kw = total_essential_kw + adjusted_flexible_kw
+
+            # Behind-the-meter and feeder-level balance
+            raw_net_balance_kw = total_solar_kw - adjusted_demand_kw
+
+            comm_batt_chg_kw = 0.0
+            comm_batt_dis_kw = 0.0
+            grid_import_kw = 0.0
+            grid_export_kw = 0.0
+            curtailed_solar_kw = 0.0
+            unmet_demand_kw = 0.0
+
+            if raw_net_balance_kw > 1e-9:
+                # Solar surplus: charge community battery
+                headroom = comm_battery.headroom_kwh
+                if headroom > 0.05 and comm_battery.soc_pct < 98.0:
+                    ch_p, _, _ = comm_battery.charge(raw_net_balance_kw, dt)
+                    comm_batt_chg_kw = ch_p
+                    rem_surplus = raw_net_balance_kw - ch_p
+                else:
+                    rem_surplus = raw_net_balance_kw
+
+                if rem_surplus > 1e-9:
+                    grid_export_kw = min(rem_surplus, max_xfmr_kw)
+                    curtailed_solar_kw = max(0.0, rem_surplus - grid_export_kw)
+
+            elif raw_net_balance_kw < -1e-9:
+                # Deficit:
+                deficit_kw = abs(raw_net_balance_kw)
+                # Forecast-driven coordination logic:
+                # Prioritize battery discharge during:
+                # 1) Peak tariff hours (18:00 - 22:00)
+                # 2) Evening ramp hours (17:00 - 23:00)
+                # 3) Emergency overload where deficit exceeds transformer rating
+                # Off-peak early morning (00:00 - 06:00) preserves battery capacity for high-value peak shaving!
+                should_discharge = is_peak_tariff or (17.0 <= hour <= 23.0) or (deficit_kw > max_xfmr_kw * 0.8) or (scenario.solar_multiplier <= 0.25)
+                
+                if should_discharge and comm_battery.available_energy_kwh > 0.05:
+                    dis_p, _, _ = comm_battery.discharge(deficit_kw, dt)
+                    comm_batt_dis_kw = dis_p
+                    rem_deficit = max(0.0, deficit_kw - dis_p)
+                else:

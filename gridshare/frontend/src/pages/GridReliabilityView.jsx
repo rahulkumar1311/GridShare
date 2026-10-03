@@ -228,3 +228,188 @@ export default function GridReliabilityView() {
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
               Scenario & Feeder Physics Controls
             </h2>
+          </div>
+          <span className="text-[11px] text-slate-500 font-mono">
+            {horizonHours}h Horizon | Initial SOC: {initialSoc}% | Reserve: {reserveFloor}%
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 text-xs">
+          {/* Weather Scenario Preset */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              Renewable Solar Profile
+            </label>
+            <select
+              value={weatherScenario}
+              onChange={(e) => setWeatherScenario(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:border-emerald-500 focus:outline-hidden"
+            >
+              <option value="NORMAL">Standard Diurnal Day (1.0x)</option>
+              <option value="HIGH_SOLAR">High Solar Surplus (1.25x)</option>
+              <option value="CLOUDY_INTERMITTENT">Cloud Intermittency (0.35x drop)</option>
+              <option value="MONSOON_STORM">Monsoon Deficit (0.20x solar)</option>
+            </select>
+          </div>
+
+          {/* Initial Battery SOC Slider */}
+          <div>
+            <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+              <span>Initial Battery SOC</span>
+              <span className="font-mono text-emerald-700">{initialSoc}%</span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="95"
+              step="5"
+              value={initialSoc}
+              onChange={(e) => setInitialSoc(Number(e.target.value))}
+              className="w-full accent-emerald-600 cursor-pointer"
+            />
+          </div>
+
+          {/* Battery Reserve Floor */}
+          <div>
+            <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+              <span>Reserve Floor Guard</span>
+              <span className="font-mono text-amber-700">{reserveFloor}%</span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="30"
+              step="5"
+              value={reserveFloor}
+              onChange={(e) => setReserveFloor(Number(e.target.value))}
+              className="w-full accent-amber-600 cursor-pointer"
+            />
+          </div>
+
+          {/* Horizon Selection */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              Optimization Horizon
+            </label>
+            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              {[6, 12, 24].map((h) => (
+                <button
+                  key={h}
+                  onClick={() => setHorizonHours(h)}
+                  className={`flex-1 rounded-md py-1 text-[11px] font-bold transition ${
+                    horizonHours === h
+                      ? 'bg-white text-emerald-800 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {h} Hours
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Flexible Load Shifting Toggle */}
+          <div className="flex flex-col justify-end">
+            <label className="flex items-center space-x-2 cursor-pointer select-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 hover:bg-slate-100 transition">
+              <input
+                type="checkbox"
+                checked={allowFlexibleShift}
+                onChange={(e) => setAllowFlexibleShift(e.target.checked)}
+                className="h-3.5 w-3.5 rounded text-emerald-600 focus:ring-emerald-500"
+              />
+              <span className="text-[11px] font-semibold text-slate-800">
+                Enable Load Shifting
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Section A: Feeder Overview KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* KPI 1: Households in Feeder */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Feeder Cluster</span>
+            <Building className="h-4 w-4 text-indigo-500" />
+          </div>
+          <div className="text-xl font-black text-slate-900">5 Homes</div>
+          <p className="text-[10.5px] text-slate-500 font-medium">3 Prosumers, 2 Consumers</p>
+        </div>
+
+        {/* KPI 2: Total Forecast Demand */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Forecast Demand</span>
+            <Power className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="text-xl font-black text-slate-900">
+            {kpis.total_forecast_demand_kwh?.toFixed(1) || '0.0'} <span className="text-xs font-normal">kWh</span>
+          </div>
+          <p className="text-[10.5px] text-emerald-600 font-medium flex items-center gap-1">
+            <ShieldCheck className="h-3 w-3" /> 100% Essential Protected
+          </p>
+        </div>
+
+        {/* KPI 3: Available Solar Generation */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Forecast Solar</span>
+            <Sun className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="text-xl font-black text-emerald-700">
+            {kpis.total_forecast_solar_kwh?.toFixed(1) || '0.0'} <span className="text-xs font-normal">kWh</span>
+          </div>
+          <p className="text-[10.5px] text-slate-500 font-medium">
+            Diurnal Geometry Model
+          </p>
+        </div>
+
+        {/* KPI 4: Supply Shortfall Detected */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Shortfalls</span>
+            <AlertTriangle className={`h-4 w-4 ${shortfalls.count > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
+          </div>
+          <div className="text-xl font-black text-slate-900">
+            {shortfalls.count} <span className="text-xs font-normal">Intervals</span>
+          </div>
+          <p className="text-[10.5px] text-slate-500 font-medium">
+            {shortfalls.count > 0 ? 'Peak Deficit Buffered' : 'No Shortfall'}
+          </p>
+        </div>
+
+        {/* KPI 5: Community Battery ESS & Usable Energy */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Shared ESS</span>
+            <BatteryCharging className="h-4 w-4 text-emerald-600" />
+          </div>
+          <div className="text-xl font-black text-slate-900">
+            {initialSoc}% <span className="text-xs font-normal">SOC</span>
+          </div>
+          <p className="text-[10.5px] text-slate-500 font-medium">
+            Usable: <span className="text-emerald-700 font-bold">{Math.max(0, batteryCapacity * (initialSoc - reserveFloor) / 100).toFixed(1)} kWh</span> (Floor {reserveFloor}%)
+          </p>
+        </div>
+
+        {/* KPI 6: Grid Import & Unmet Demand */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Grid & Shortfall</span>
+            <IndianRupee className="h-4 w-4 text-indigo-600" />
+          </div>
+          <div className="text-xl font-black text-indigo-900">
+            {kpis.total_grid_imported_kwh?.toFixed(1) || '0.0'} <span className="text-xs font-normal">kWh</span>
+          </div>
+          <p className="text-[10.5px] font-medium font-mono">
+            {kpis.total_unmet_shortfall_kwh > 0 ? (
+              <span className="text-amber-600 font-bold">Unmet: {kpis.total_unmet_shortfall_kwh.toFixed(1)} kWh</span>
+            ) : (
+              <span className="text-emerald-600">Unmet: 0.0 kWh (100% Met)</span>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {/* 4. Section B: Time-Series Recharts */}

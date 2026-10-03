@@ -73,3 +73,22 @@ class BatteryState:
         self.current_energy_kwh = min(self.capacity_kwh, self.current_energy_kwh + chem_energy_stored_kwh)
         return actual_power_kw, chem_energy_stored_kwh, loss_kwh
 
+    def discharge(self, target_power_kw: float, duration_hours: float) -> Tuple[float, float, float]:
+        """
+        Discharges battery to supply target_power_kw at electrical terminals for duration_hours.
+        Returns:
+            (actual_power_kw, energy_delivered_kwh, loss_kwh)
+        """
+        if target_power_kw <= 1e-9 or duration_hours <= 1e-9:
+            return 0.0, 0.0, 0.0
+
+        # Max electrical power deliverable without violating the reserve floor
+        max_power_from_storage = (self.available_energy_kwh * self.discharge_efficiency) / duration_hours
+        actual_power_kw = max(0.0, min(target_power_kw, self.max_discharge_power_kw, max_power_from_storage))
+
+        electrical_energy_delivered = actual_power_kw * duration_hours
+        chem_energy_drawn = electrical_energy_delivered / self.discharge_efficiency if self.discharge_efficiency > 0 else 0.0
+        loss_kwh = chem_energy_drawn - electrical_energy_delivered
+
+        self.current_energy_kwh = max(self.min_reserve_kwh, self.current_energy_kwh - chem_energy_drawn)
+        return actual_power_kw, electrical_energy_delivered, loss_kwh

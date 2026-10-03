@@ -468,3 +468,63 @@ class FeederEvaluationService:
                     comm_batt_dis_kw = dis_p
                     rem_deficit = max(0.0, deficit_kw - dis_p)
                 else:
+                    rem_deficit = deficit_kw
+
+                if rem_deficit > 1e-9:
+                    grid_import_kw = min(rem_deficit, max_xfmr_kw)
+                    unmet_demand_kw = max(0.0, rem_deficit - grid_import_kw)
+
+            demand_served_kw = max(0.0, adjusted_demand_kw - unmet_demand_kw)
+
+            # Smart Essential Load Protection:
+            # Flexible load absorbs unmet demand first.
+            # Essential load is ONLY unmet if total unmet demand exceeds total flexible demand.
+            if unmet_demand_kw > adjusted_flexible_kw:
+                unmet_essential_kw = unmet_demand_kw - adjusted_flexible_kw
+            else:
+                unmet_essential_kw = 0.0
+
+            # Economics
+            import_cost = (grid_import_kw * dt) * imp_tariff
+            export_rev = (grid_export_kw * dt) * exp_tariff
+            net_cost = import_cost - export_rev
+
+            # Sources vs sinks balance
+            sources = total_solar_kw + comm_batt_dis_kw + grid_import_kw
+            sinks = demand_served_kw + comm_batt_chg_kw + grid_export_kw + curtailed_solar_kw
+            balance_residual = abs(sources - sinks)
+
+            # Renewable self-consumed
+            renewable_self_consumed_kw = total_solar_kw - grid_export_kw - curtailed_solar_kw
+
+            steps_output.append({
+                "step_index": t,
+                "hour_of_day": hour,
+                "total_demand_kw": adjusted_demand_kw,
+                "total_essential_kw": total_essential_kw,
+                "total_flexible_kw": adjusted_flexible_kw,
+                "demand_served_kw": demand_served_kw,
+                "unmet_demand_kw": unmet_demand_kw,
+                "unmet_essential_kw": unmet_essential_kw,
+                "total_solar_kw": total_solar_kw,
+                "renewable_self_consumed_kw": renewable_self_consumed_kw,
+                "curtailed_solar_kw": curtailed_solar_kw,
+                "battery_charge_kw": comm_batt_chg_kw,
+                "battery_discharge_kw": comm_batt_dis_kw,
+                "battery_soc_pct": comm_battery.soc_pct,
+                "grid_import_kw": grid_import_kw,
+                "grid_export_kw": grid_export_kw,
+                "energy_cost_inr": net_cost,
+                "balance_residual_kw": balance_residual,
+                "reserve_violated": comm_battery.soc_pct < (comm_battery.min_reserve_pct - 1e-4),
+                "essential_violated": unmet_essential_kw > 1e-4,
+                "shifted_load_away_kw": shifted_loads_kw[t],
+                "shifted_load_in_kw": received_loads_kw[t],
+            })
+
+        runtime_ms = (time.perf_counter() - start_time) * 1000.0
+
+        metrics = cls._calculate_strategy_metrics(steps_output, dt, runtime_ms)
+        return {
+            "strategy": "GRIDSHARE",
+            "description": "Forecast-driven coordination with flexible load shifting and predictive battery dispatch.",

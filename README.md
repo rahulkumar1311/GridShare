@@ -1,11 +1,74 @@
 # ⚡ GridShare — AI-Driven Decentralized Community Microgrid
+### Schneider Electric Yuva Yodha 2026 — Challenge 03: Grid Reliability & Renewable Intermittency
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](https://opensource.org/licenses/MIT)
 [![Node: 18+](https://img.shields.io/badge/node-18%2B-blue.svg)](https://nodejs.org)
-[![Python: 3.10+](https://img.shields.io/badge/python-3.10%2B-amber.svg)](https://www.python.org)
-[![Build Status](https://img.shields.io/badge/tests-26%2F26%20passing-success.svg)]()
+[![Python: 3.12](https://img.shields.io/badge/python-3.12-amber.svg)](https://www.python.org)
+[![Test Suite](https://img.shields.io/badge/tests-81%2F81%20passing-success.svg)]()
+[![Production Build](https://img.shields.io/badge/vite%20build-passing-success.svg)]()
 
-GridShare is a state-of-the-art **decentralized peer-to-peer (P2P) community energy trading, battery optimization, and digital twin platform**. It empowers residential neighborhoods to maximize local renewable solar utilization, eliminate peak grid charges, and equitably share community energy storage through automated AI forecasting and continuous double-auction market clearing.
+GridShare is a **decentralized peer-to-peer (P2P) community microgrid platform** engineered to solve **low-voltage feeder reliability, renewable intermittency, and peak transformer overloading**. It integrates a trained **Random Forest demand forecasting ensemble**, a **physical feeder simulation engine** (LinDistFlow voltage & energy conservation), and **multi-interval predictive storage and flexible-load coordination**.
+
+---
+
+## 🎯 Challenge 03: Problem & Target Users
+
+### The Problem: Renewable Intermittency on Low-Voltage Feeders
+As residential rooftop solar PV adoption surges, distribution substations face two destabilizing extremes:
+1. **Midday Reverse Power Surges**: Solar generation exceeds household loads, causing reverse power flow, local bus overvoltage ($>1.05\text{ p.u.}$), and inverter tripping.
+2. **Evening Shortfall & Steep Ramp (The Duck Curve)**: When solar generation collapses at sunset, simultaneous residential EV charging, cooling/heating, and cooking create an unmitigated evening demand spike, overloading distribution transformers and incurring costly peak utility tariffs.
+
+### Target Users & Stakeholders
+* **Distribution System Operators (DSOs / DISCOMs)**: Need transformer ampacity protection, voltage compliance, and non-wire alternatives to expensive substation transformer upgrades.
+* **Community Microgrid Operators & Housing Societies**: Require shared energy storage system (ESS) management, autonomous demand response, and fair allocation.
+* **Prosumers & Consumers**: Prosumers want higher value for solar surplus than low feed-in tariffs; consumers want cheaper green electricity without sacrificing essential appliance availability.
+
+---
+
+## 🔬 How GridShare Addresses Renewable Intermittency
+
+1. **Empirical ML Demand & Diurnal Solar Forecasts**: Uses a 100-tree `RandomForestRegressor` with ensemble tree variance ($\sigma$) to predict 1h–24h feeder demand and shortfalls ahead of time.
+2. **Predictive Community ESS Arbitrage**: Automatically charges community battery storage during midday solar surplus and discharges during peak TOU windows ($18\text{h}00$–$22\text{h}00$), preserving a strict $20\%$ critical emergency reserve floor.
+3. **Headroom-Constrained Demand Shifting**: Deferrable flexible loads (EV charging, laundry) are coordinated and shifted from evening deficit windows into midday solar surplus hours without double-allocating solar headroom.
+4. **Guaranteed Essential Base-Load Safeguard**: Base critical loads (lighting, refrigeration, medical equipment) are strictly non-curtailable. In severe capacity-constrained emergencies, only flexible loads are shed.
+5. **Exact Physical Feeder Simulation (LinDistFlow)**: Enforces real-world transformer kVA limits, low-voltage line impedances, voltage drop/rise bounds ($0.95$–$1.05\text{ p.u.}$), and exact energy conservation ($\sum \text{sources} = \sum \text{sinks}$ to $< 10^{-6}\text{ kW}$).
+
+---
+
+## 🏛️ System Architecture & Actual Data Flow
+
+```
+[ Historical Data & Profiles ]
+              │
+              ▼
+[ RandomForestRegressor (100 Trees) ] ──► [ Demand Forecast (kW) ± Empirical Tree Std Dev (σ) ]
+[ Diurnal Solar Geometry Model ]      ──► [ Renewable Solar Forecast (kW) ]
+                                                            │
+                                                            ▼
+                                          [ Feeder Forecast Optimizer ]
+                                          ├── Detects Deficit & Shortfall Windows
+                                          ├── Enforces Battery Reserve Floor (>=20%) & C-Rates
+                                          ├── Shifts Flexible Loads into Verified Solar Headroom
+                                          └── Optimizes Time-of-Use (TOU) Tariff Arbitrage
+                                                            │
+                                                            ▼
+                                          [ Physical Feeder Simulation Engine ]
+                                          ├── LinDistFlow Voltage Approximation (V_pu)
+                                          ├── Transformer Ampacity & Loading Ceiling (50 kVA)
+                                          ├── Battery Chemical Storage & Efficiency Losses (90.25%)
+                                          └── Energy Balance Conservation (Sources == Sinks)
+                                                            │
+                                                            ▼
+                                          [ Flask REST Endpoints (/api/feeder/*) ]
+                                                            │
+                                                            ▼
+                                          [ Grid Reliability Dashboard (/grid) ]
+                                          ├── Feeder Overview KPIs (Usable Energy, Unmet Demand)
+                                          ├── Multi-Series Recharts (Solar, Demand, Import, SOC)
+                                          ├── Feasible Action Panel (Battery & DR Recommendations)
+                                          ├── Scenario Physics Sliders (Solar, Demand, SOC, Floor)
+                                          └── Reproducible Benchmark Suite (6 Test Scenarios)
+```
 
 ---
 
@@ -115,57 +178,3 @@ python -m gridshare.database.init_db
 ```bash
 python -m unittest gridshare.backend.tests.test_api
 ```
-
-### 5. Start Backend Server (Port 5000)
-```bash
-python -m gridshare.backend.run
-```
-- **Health Check**: `http://localhost:5000/api/health`
-- **Dashboard API**: `http://localhost:5000/api/dashboard/summary`
-- **Battery Ledger**: `http://localhost:5000/api/battery/ledger`
-
-### 6. Start Frontend Development Server (Port 5173)
-In a separate terminal:
-```bash
-cd gridshare/frontend
-npm run dev
-```
-Open **`http://localhost:5173`** in your browser.
-
----
-
-## 📡 REST API Summary
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | Service health and cluster connectivity status. |
-| `GET` | `/api/energy/live` | Real-time aggregate generation, demand, and net grid balance. |
-| `GET` | `/api/dashboard/summary` | Complete microgrid overview metrics, nodes, and battery SOC. |
-| `GET` | `/api/battery` | Battery state, total stored kWh, SOC, and reserve settings. |
-| `POST` | `/api/battery/contribute` | Ingests prosumer surplus into community battery storage. |
-| `POST` | `/api/battery/withdraw` | Discharges stored energy to supply household load. |
-| `GET` | `/api/battery/ledger` | Audit trail of all storage contribution and withdrawal events. |
-| `GET` | `/api/market/orders` | Active P2P buy bids and sell offers in order book. |
-| `POST` | `/api/market/offers` | Submits a prosumer surplus sell offer. |
-| `POST` | `/api/market/requests` | Submits a consumer energy buy request. |
-| `POST` | `/api/market/match` | Runs continuous double-auction clearing and matching. |
-| `GET` | `/api/market/transactions` | Verified P2P energy trades and settlement records. |
-| `POST` | `/api/optimize` | Runs multi-objective constraint optimization solver. |
-| `POST` | `/api/demo/ppt-scenario` | Injects deterministic hackathon presentation demo state. |
-
----
-
-## 🎯 Benchmark Economic & Tariff Model
-
-| Parameter | Utility Grid Standard | GridShare P2P Network | Prosumer / Consumer Benefit |
-| :--- | :--- | :--- | :--- |
-| **Grid Import Tariff** | ₹6.10 / kWh | — | Baseline utility retail rate. |
-| **Grid Export Feed-in** | ₹3.50 / kWh | — | Low DISCOM compensation. |
-| **P2P Matched Tariff** | — | **₹4.50 / kWh** | **Prosumer earns +₹1.00/kWh more** vs export. |
-| **Consumer Savings** | — | **₹4.50 / kWh** | **Consumer saves ₹1.60/kWh** vs grid import. |
-| **Community ESS Dividend** | — | **Virtual Credits** | Fair ownership proportional to kWh contributed. |
-
----
-
-## 📄 License
-This project is open-source and licensed under the **MIT License**.

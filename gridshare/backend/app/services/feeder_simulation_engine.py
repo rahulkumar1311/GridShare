@@ -54,3 +54,22 @@ class BatteryState:
         return max(0.0, self.current_energy_kwh - self.min_reserve_kwh)
 
     def charge(self, target_power_kw: float, duration_hours: float) -> Tuple[float, float, float]:
+        """
+        Charges battery with up to target_power_kw for duration_hours.
+        Returns:
+            (actual_power_kw, chem_energy_stored_kwh, loss_kwh)
+        """
+        if target_power_kw <= 1e-9 or duration_hours <= 1e-9:
+            return 0.0, 0.0, 0.0
+
+        # Max electrical power that can be absorbed given chemistry headroom and efficiency
+        max_power_from_headroom = self.headroom_kwh / (self.charge_efficiency * duration_hours)
+        actual_power_kw = max(0.0, min(target_power_kw, self.max_charge_power_kw, max_power_from_headroom))
+
+        electrical_energy_kwh = actual_power_kw * duration_hours
+        chem_energy_stored_kwh = electrical_energy_kwh * self.charge_efficiency
+        loss_kwh = electrical_energy_kwh - chem_energy_stored_kwh
+
+        self.current_energy_kwh = min(self.capacity_kwh, self.current_energy_kwh + chem_energy_stored_kwh)
+        return actual_power_kw, chem_energy_stored_kwh, loss_kwh
+

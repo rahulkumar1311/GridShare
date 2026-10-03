@@ -35,3 +35,22 @@ class BatteryState:
         self.charge_efficiency = max(0.1, min(1.0, float(self.charge_efficiency)))
         self.discharge_efficiency = max(0.1, min(1.0, float(self.discharge_efficiency)))
 
+    @property
+    def min_reserve_kwh(self) -> float:
+        return self.capacity_kwh * (self.min_reserve_pct / 100.0)
+
+    @property
+    def soc_pct(self) -> float:
+        return round((self.current_energy_kwh / self.capacity_kwh) * 100.0, 2)
+
+    @property
+    def headroom_kwh(self) -> float:
+        """Maximum chemical energy that can be added before reaching 100% capacity."""
+        return max(0.0, self.capacity_kwh - self.current_energy_kwh)
+
+    @property
+    def available_energy_kwh(self) -> float:
+        """Usable chemical energy above the emergency reserve floor."""
+        return max(0.0, self.current_energy_kwh - self.min_reserve_kwh)
+
+    def charge(self, target_power_kw: float, duration_hours: float) -> Tuple[float, float, float]:

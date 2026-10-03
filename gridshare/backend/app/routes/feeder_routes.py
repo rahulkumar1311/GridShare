@@ -72,3 +72,35 @@ def simulate_feeder_horizon():
     return jsonify(result), 200
 
 @feeder_bp.route("/api/feeder/scenarios", methods=["GET"])
+def get_feeder_scenarios():
+    """Returns available test and hackathon demo scenarios."""
+    scenarios = [
+        {
+            "id": "NORMAL",
+            "name": "Standard Diurnal Day",
+            "description": "Baseline solar bell curve with morning (8-10am) and evening peak (6-10pm) demand.",
+        },
+        {
+            "id": "HIGH_SOLAR",
+            "name": "High Renewable Surplus",
+            "description": "Peak solar irradiance (1.25x). Tests transformer reverse power flow and ESS charge absorption.",
+        },
+        {
+            "id": "CLOUDY_INTERMITTENT",
+            "name": "Solar Intermittency & Cloud Transient",
+            "description": "Midday cloud cover causes 65% solar drop. Demonstrates community ESS dispatch preventing voltage collapse.",
+        },
+        {
+            "id": "MONSOON_STORM",
+            "name": "Severe Renewable Deficit",
+            "description": "Heavy cloud cover (0.2x solar). Tests peak utility import and flexible load shedding.",
+        },
+        {
+            "id": "ISLANDED_BLACKOUT",
+            "name": "Utility Grid Outage (Microgrid Islanding)",
+            "description": "Main utility substation disconnects. Feeder operates purely on local solar, BTM storage, and Community ESS.",
+        },
+    ]
+    return jsonify({"status": "SUCCESS", "scenarios": scenarios}), 200
+
+@feeder_bp.route("/api/feeder/forecast", methods=["GET"])

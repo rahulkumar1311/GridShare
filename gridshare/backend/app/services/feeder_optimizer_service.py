@@ -348,3 +348,25 @@ class FeederForecastOptimizerService:
                                 shifted_flex_kw = shiftable_amount
                                 rem_deficit = max(0.0, rem_deficit - shiftable_amount)
                                 total_shifted_load_kwh += shiftable_amount * dt
+                                # Decrement candidate headroom to prevent double allocation of solar surplus
+                                eligible_candidate["surplus_headroom_kw"] -= shiftable_amount
+                                dest_idx = eligible_candidate["step_index"]
+                                # Track received shifted load in destination interval for exact accounting
+                                intervals_summary[dest_idx]["received_shifted_load_kw"] = (
+                                    intervals_summary[dest_idx].get("received_shifted_load_kw", 0.0) + shiftable_amount
+                                )
+
+                                recommendations.append({
+                                    "interval": t_label,
+                                    "step_index": t,
+                                    "action_type": "SHIFT_FLEXIBLE_LOAD",
+                                    "target_power_kw": shiftable_amount,
+                                    "energy_kwh": round(shiftable_amount * dt, 3),
+                                    "destination_interval": eligible_candidate["time_label"],
+                                    "reason": f"Advised shifting {shiftable_amount} kW flexible load (e.g. EV/laundry) from peak shortfall interval ({t_label}) to solar surplus interval ({eligible_candidate['time_label']}).",
+                                    "financial_impact_inr": round(shiftable_amount * dt * (tariff_in - grid_export_feedin_per_kwh), 2),
+                                    "financial_benefit_description": f"Avoids ₹{tariff_in:.2f}/kWh peak import by utilizing free local solar surplus in future interval.",
+                                    "constraints_checked": "Only flexible load shifted; 100% of essential load remains continuously energized.",
+                                    "essential_load_protected": True,
+                                    "forecast_uncertainty_kw": iv["aggregate_uncertainty_kw"],
+                                })

@@ -355,3 +355,26 @@ class FeederSimulationEngine:
             rem_surplus_final_kw = 0.0
             rem_deficit_final_kw = 0.0
 
+        # Step 5: Substation Transformer Capacity & Utility Grid Exchange
+        max_transformer_active_kw = self.config.transformer_capacity_kva * self.config.power_factor
+        grid_import_kw = 0.0
+        grid_export_kw = 0.0
+        unmet_demand_kw = 0.0
+        curtailed_solar_kw = 0.0
+
+        if not grid_available:
+            # Islanded microgrid mode
+            unmet_demand_kw = rem_deficit_final_kw
+            curtailed_solar_kw = rem_surplus_final_kw
+        else:
+            # Grid connected: check transformer rating
+            if rem_deficit_final_kw > 1e-9:
+                grid_import_kw = min(rem_deficit_final_kw, max_transformer_active_kw)
+                unmet_demand_kw = max(0.0, rem_deficit_final_kw - grid_import_kw)
+            elif rem_surplus_final_kw > 1e-9:
+                grid_export_kw = min(rem_surplus_final_kw, max_transformer_active_kw)
+                curtailed_solar_kw = max(0.0, rem_surplus_final_kw - grid_export_kw)
+
+        # In case of unmet demand, curtail flexible loads first
+        demand_served_kw = max(0.0, total_demand_req_kw - unmet_demand_kw)
+

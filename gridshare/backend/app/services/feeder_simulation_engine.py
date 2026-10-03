@@ -334,3 +334,24 @@ class FeederSimulationEngine:
         rem_surplus_after_p2p_kw = feeder_surplus_pool_kw - p2p_cleared_kw
         rem_deficit_after_p2p_kw = feeder_deficit_pool_kw - p2p_cleared_kw
 
+        # Step 4: Shared Community Battery ESS Dispatch
+        comm_charge_kw = 0.0
+        comm_discharge_kw = 0.0
+        comm_loss_kwh = 0.0
+
+        if rem_surplus_after_p2p_kw > 1e-9:
+            ch_p, _, loss = self.community_battery.charge(rem_surplus_after_p2p_kw, dt)
+            comm_charge_kw = ch_p
+            comm_loss_kwh = loss
+            rem_surplus_final_kw = rem_surplus_after_p2p_kw - ch_p
+            rem_deficit_final_kw = 0.0
+        elif rem_deficit_after_p2p_kw > 1e-9:
+            dis_p, _, loss = self.community_battery.discharge(rem_deficit_after_p2p_kw, dt)
+            comm_discharge_kw = dis_p
+            comm_loss_kwh = loss
+            rem_deficit_final_kw = rem_deficit_after_p2p_kw - dis_p
+            rem_surplus_final_kw = 0.0
+        else:
+            rem_surplus_final_kw = 0.0
+            rem_deficit_final_kw = 0.0
+

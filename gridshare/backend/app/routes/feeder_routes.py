@@ -104,3 +104,12 @@ def get_feeder_scenarios():
     return jsonify({"status": "SUCCESS", "scenarios": scenarios}), 200
 
 @feeder_bp.route("/api/feeder/forecast", methods=["GET"])
+def get_feeder_forecast():
+    """Returns multi-household Random Forest demand forecasts and analytical solar predictions."""
+    from gridshare.backend.app.services.feeder_optimizer_service import FeederForecastOptimizerService
+    try:
+        horizon = int(request.args.get("horizon_hours", 6))
+    except (ValueError, TypeError):
+        horizon = 6
+    horizon = max(1, min(24, horizon))
+

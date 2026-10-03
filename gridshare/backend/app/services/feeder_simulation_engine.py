@@ -329,3 +329,8 @@ class FeederSimulationEngine:
             feeder_surplus_pool_kw += rem_gen
             feeder_deficit_pool_kw += rem_dem
 
+        # Step 3: Feeder P2P Energy Sharing (Physical Nodal Reallocation)
+        p2p_cleared_kw = min(feeder_surplus_pool_kw, feeder_deficit_pool_kw)
+        rem_surplus_after_p2p_kw = feeder_surplus_pool_kw - p2p_cleared_kw
+        rem_deficit_after_p2p_kw = feeder_deficit_pool_kw - p2p_cleared_kw
+

@@ -94,3 +94,18 @@ class BatteryState:
             self.current_energy_kwh = max(self.min_reserve_kwh, self.current_energy_kwh - chem_energy_drawn)
         return actual_power_kw, electrical_energy_delivered, loss_kwh
 
+
+@dataclass
+class HouseholdNodeConfig:
+    id: str
+    name: str
+    solar_capacity_kw: float
+    base_essential_kw: float
+    base_flexible_kw: float
+    has_btm_battery: bool = False
+    btm_battery_capacity_kwh: float = 0.0
+    btm_battery_initial_soc: float = 50.0
+    btm_battery_reserve_pct: float = 20.0
+    btm_battery_max_power_kw: float = 3.0
+
+

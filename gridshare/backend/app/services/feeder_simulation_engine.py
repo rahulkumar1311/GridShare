@@ -129,3 +129,101 @@ class FeederConfig:
     community_battery_max_power_kw: float = 15.0
 
 
+class FeederSimulationEngine:
+    """
+    Deterministic neighbourhood-level feeder simulation engine.
+    Calculates step-by-step physical electrical flows, DER dispatch,
+    transformer loading, voltage deviations, and tariff settlements.
+    """
+
+    def __init__(self, config: Optional[FeederConfig] = None, households: Optional[List[HouseholdNodeConfig]] = None):
+        self.config = config or FeederConfig()
+        self.households_config = households or self._get_default_households()
+        
+        # Initialize Behind-the-Meter (BTM) batteries
+        self.btm_batteries: Dict[str, Optional[BatteryState]] = {}
+        for h in self.households_config:
+            if h.has_btm_battery and h.btm_battery_capacity_kwh > 0:
+                init_energy = h.btm_battery_capacity_kwh * (h.btm_battery_initial_soc / 100.0)
+                self.btm_batteries[h.id] = BatteryState(
+                    id=f"btm_battery_{h.id}",
+                    capacity_kwh=h.btm_battery_capacity_kwh,
+                    current_energy_kwh=init_energy,
+                    min_reserve_pct=h.btm_battery_reserve_pct,
+                    max_charge_power_kw=h.btm_battery_max_power_kw,
+                    max_discharge_power_kw=h.btm_battery_max_power_kw,
+                )
+            else:
+                self.btm_batteries[h.id] = None
+
+        # Initialize Shared Community ESS
+        init_comm_energy = self.config.community_battery_capacity_kwh * (self.config.community_battery_initial_soc / 100.0)
+        self.community_battery = BatteryState(
+            id="community_ess_01",
+            capacity_kwh=self.config.community_battery_capacity_kwh,
+            current_energy_kwh=init_comm_energy,
+            min_reserve_pct=self.config.community_battery_reserve_pct,
+            max_charge_power_kw=self.config.community_battery_max_power_kw,
+            max_discharge_power_kw=self.config.community_battery_max_power_kw,
+            charge_efficiency=0.95,
+            discharge_efficiency=0.95,
+        )
+
+    @staticmethod
+    def _get_default_households() -> List[HouseholdNodeConfig]:
+        """Standard 5-home community microgrid aligned with GridShare seed models."""
+        return [
+            HouseholdNodeConfig(
+                id="house_a",
+                name="House A (Solar Champion)",
+                solar_capacity_kw=8.0,
+                base_essential_kw=1.2,
+                base_flexible_kw=0.9,
+                has_btm_battery=True,
+                btm_battery_capacity_kwh=10.0,
+                btm_battery_initial_soc=70.0,
+                btm_battery_reserve_pct=20.0,
+                btm_battery_max_power_kw=3.5,
+            ),
+            HouseholdNodeConfig(
+                id="house_b",
+                name="House B (Heavy EV Consumer)",
+                solar_capacity_kw=1.5,
+                base_essential_kw=2.0,
+                base_flexible_kw=2.5,
+                has_btm_battery=False,
+            ),
+            HouseholdNodeConfig(
+                id="house_c",
+                name="House C (Balanced Prosumer)",
+                solar_capacity_kw=4.0,
+                base_essential_kw=1.1,
+                base_flexible_kw=1.1,
+                has_btm_battery=True,
+                btm_battery_capacity_kwh=6.0,
+                btm_battery_initial_soc=50.0,
+                btm_battery_reserve_pct=20.0,
+                btm_battery_max_power_kw=2.5,
+            ),
+            HouseholdNodeConfig(
+                id="house_d",
+                name="House D (Smart Apartment)",
+                solar_capacity_kw=0.0,
+                base_essential_kw=1.2,
+                base_flexible_kw=1.3,
+                has_btm_battery=False,
+            ),
+            HouseholdNodeConfig(
+                id="house_e",
+                name="House E (Solar Villa)",
+                solar_capacity_kw=6.0,
+                base_essential_kw=1.5,
+                base_flexible_kw=1.0,
+                has_btm_battery=True,
+                btm_battery_capacity_kwh=8.0,
+                btm_battery_initial_soc=60.0,
+                btm_battery_reserve_pct=20.0,
+                btm_battery_max_power_kw=3.0,
+            ),
+        ]
+

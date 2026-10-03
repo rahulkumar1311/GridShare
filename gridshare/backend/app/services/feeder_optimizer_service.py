@@ -32,3 +32,44 @@ class FeederForecastOptimizerService:
     DEFAULT_ESS_MAX_POWER_KW = 15.0
 
     @classmethod
+    def get_feeder_forecasts(
+        cls,
+        horizon_hours: int = 6,
+        households: Optional[List[HouseholdNodeConfig]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Runs the trained Random Forest inference model for each household in the feeder.
+        Outputs short-term demand predictions, empirical ensemble uncertainty (tree std dev),
+        and analytical diurnal solar generation.
+        """
+        predictor = DemandPredictor()
+        hh_configs = households or FeederSimulationEngine._get_default_households()
+        
+        household_forecasts = {}
+        for h in hh_configs:
+            # Attempt to pull recent readings from DB context if available
+            recent_dicts = None
+            try:
+                readings = (
+                    EnergyReading.query.filter_by(household_id=h.id)
+                    .order_by(EnergyReading.timestamp.desc())
+                    .limit(5)
+                    .all()
+                )
+                if readings:
+                    recent_dicts = [r.to_dict() for r in reversed(readings)]
+            except Exception:
+                recent_dicts = None
+
+            fc = predictor.predict_next_hours(
+                household_id=h.id,
+                recent_readings=recent_dicts,
+                horizon_hours=horizon_hours,
+            )
+            household_forecasts[h.id] = {
+                "config": h,
+                "steps": fc,
+            }
+
+        return household_forecasts
+

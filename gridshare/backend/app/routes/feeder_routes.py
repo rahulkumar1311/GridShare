@@ -43,3 +43,32 @@ def get_feeder_reliability_status():
     }), 200
 
 @feeder_bp.route("/api/feeder/simulate", methods=["POST"])
+def simulate_feeder_horizon():
+    """
+    Executes multi-step feeder-level time series simulation:
+    Payload:
+      - horizon_steps: int (default 24)
+      - step_duration_hours: float (default 1.0)
+      - start_hour: float (default 0.0)
+      - weather_scenario: str ("NORMAL" | "HIGH_SOLAR" | "CLOUDY_INTERMITTENT" | "MONSOON_STORM")
+      - grid_available: bool (default True)
+    """
+    data = request.get_json(silent=True) or {}
+    horizon = int(data.get("horizon_steps", 24))
+    step_duration = float(data.get("step_duration_hours", 1.0))
+    start_hour = float(data.get("start_hour", 0.0))
+    weather = str(data.get("weather_scenario", "NORMAL"))
+    grid_avail = bool(data.get("grid_available", True))
+
+    # Initialize fresh engine for deterministic repeatable run
+    sim_engine = FeederSimulationEngine()
+    result = sim_engine.simulate_horizon(
+        start_hour=start_hour,
+        horizon_steps=horizon,
+        step_duration_hours=step_duration,
+        weather_scenario=weather,
+        grid_available=grid_avail,
+    )
+    return jsonify(result), 200
+
+@feeder_bp.route("/api/feeder/scenarios", methods=["GET"])

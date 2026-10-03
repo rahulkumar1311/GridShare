@@ -11,6 +11,7 @@ import MarketplaceView from './pages/MarketplaceView';
 import AiForecastView from './pages/AiForecastView';
 import MyHomeView from './pages/MyHomeView';
 import TransactionsView from './pages/TransactionsView';
+import GridReliabilityView from './pages/GridReliabilityView';
 import { api } from './services/api';
 
 function MainLayout() {
@@ -99,6 +100,8 @@ function MainLayout() {
           <Route path="/ai" element={<AiForecastView />} />
           <Route path="/my-home" element={<MyHomeView />} />
           <Route path="/transactions" element={<TransactionsView />} />
+          <Route path="/grid" element={<GridReliabilityView />} />
+          <Route path="/reliability" element={<GridReliabilityView />} />
           <Route path="*" element={<Navigate to="/simulation" replace />} />
         </Routes>
       </main>

@@ -386,3 +386,11 @@ class FeederForecastOptimizerService:
                             "reason": f"Supplying remaining deficit of {grid_import_kw} kW from main utility grid.",
                             "financial_impact_inr": round(grid_import_kw * dt * tariff_in, 2),
                             "financial_benefit_description": f"Utility grid tariff ₹{tariff_in:.2f}/kWh.",
+                            "constraints_checked": f"Transformer capacity ({max_transformer_kw} kW).",
+                            "essential_load_protected": True,
+                            "forecast_uncertainty_kw": iv["aggregate_uncertainty_kw"],
+                        })
+
+            total_forecast_demand_kwh += iv["forecast_demand_kw"] * dt
+            total_forecast_solar_kwh += iv["forecast_solar_kw"] * dt
+

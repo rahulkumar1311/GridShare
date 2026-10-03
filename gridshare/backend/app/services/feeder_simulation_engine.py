@@ -417,3 +417,94 @@ class FeederSimulationEngine:
         )
         power_balance_error_kw = abs(total_sources_kw - total_sinks_kw)
 
+        # Step 9: Economic / Tariff Settlement
+        cost_grid_import = energy_grid_import_kwh * import_tariff
+        revenue_grid_export = energy_grid_export_kwh * export_tariff
+        penalty_unmet = energy_unmet_kwh * unmet_penalty
+        net_community_cost_inr = cost_grid_import - revenue_grid_export + penalty_unmet
+        p2p_financial_volume_inr = energy_p2p_kwh * p2p_tariff
+
+        # Round for reporting dictionary
+        return {
+            "step_index": step_index,
+            "hour_of_day": round(hour, 2),
+            "duration_hours": dt,
+            "feeder_id": self.config.id,
+            "feeder_name": self.config.name,
+            "grid_status": "ONLINE" if grid_available else "ISLANDED",
+            "tariffs": {
+                "grid_import_inr_per_kwh": round(import_tariff, 2),
+                "grid_export_inr_per_kwh": round(export_tariff, 2),
+                "p2p_clearing_inr_per_kwh": round(p2p_tariff, 2),
+            },
+            "aggregate_power_kw": {
+                "total_demand_kw": round(total_demand_req_kw, 4),
+                "essential_demand_kw": round(total_essential_req_kw, 4),
+                "flexible_demand_kw": round(total_flexible_req_kw, 4),
+                "demand_served_kw": round(demand_served_kw, 4),
+                "unmet_demand_kw": round(unmet_demand_kw, 4),
+                "total_solar_generation_kw": round(total_gen_kw, 4),
+                "p2p_cleared_kw": round(p2p_cleared_kw, 4),
+                "community_battery_charge_kw": round(comm_charge_kw, 4),
+                "community_battery_discharge_kw": round(comm_discharge_kw, 4),
+                "grid_import_kw": round(grid_import_kw, 4),
+                "grid_export_kw": round(grid_export_kw, 4),
+                "curtailed_solar_kw": round(curtailed_solar_kw, 4),
+            },
+            "aggregate_energy_kwh": {
+                "demand_kwh": round(energy_demand_kwh, 4),
+                "demand_served_kwh": round(energy_demand_served_kwh, 4),
+                "unmet_demand_kwh": round(energy_unmet_kwh, 4),
+                "solar_generation_kwh": round(energy_gen_kwh, 4),
+                "p2p_traded_kwh": round(energy_p2p_kwh, 4),
+                "grid_import_kwh": round(energy_grid_import_kwh, 4),
+                "grid_export_kwh": round(energy_grid_export_kwh, 4),
+                "solar_curtailed_kwh": round(energy_curtailed_kwh, 4),
+            },
+            "feeder_reliability": {
+                "transformer_capacity_kva": self.config.transformer_capacity_kva,
+                "transformer_loading_pct": round(transformer_loading_pct, 1),
+                "transformer_status": "OVERLOAD" if transformer_loading_pct > 100.0 else "NOMINAL",
+                "bus_voltage_v": round(feeder_bus_voltage_v, 2),
+                "bus_voltage_pu": round(voltage_pu, 3),
+                "voltage_status": (
+                    "OVERVOLTAGE" if voltage_pu > 1.05 else
+                    "UNDERVOLTAGE" if voltage_pu < 0.95 else
+                    "NORMAL"
+                ),
+                "energy_balance_conserved": power_balance_error_kw < 1e-4,
+                "power_balance_error_kw": round(power_balance_error_kw, 6),
+            },
+            "community_battery": {
+                "soc_pct": self.community_battery.soc_pct,
+                "stored_kwh": round(self.community_battery.current_energy_kwh, 3),
+                "capacity_kwh": self.community_battery.capacity_kwh,
+                "min_reserve_kwh": round(self.community_battery.min_reserve_kwh, 3),
+                "active_power_kw": round(comm_charge_kw - comm_discharge_kw, 3),
+            },
+            "economics_inr": {
+                "cost_grid_import": round(cost_grid_import, 2),
+                "revenue_grid_export": round(revenue_grid_export, 2),
+                "penalty_unmet_demand": round(penalty_unmet, 2),
+                "net_community_energy_cost": round(net_community_cost_inr, 2),
+                "p2p_trade_volume_value": round(p2p_financial_volume_inr, 2),
+            },
+            "households": [
+                {
+                    "household_id": h["household_id"],
+                    "household_name": h["household_name"],
+                    "generation_kw": round(h["generation_kw"], 3),
+                    "essential_demand_kw": round(h["essential_demand_kw"], 3),
+                    "flexible_demand_kw": round(h["flexible_demand_kw"], 3),
+                    "total_demand_kw": round(h["total_demand_kw"], 3),
+                    "solar_self_consumed_kw": round(h["solar_self_consumed_kw"], 3),
+                    "btm_battery_charge_kw": round(h["btm_battery_charge_kw"], 3),
+                    "btm_battery_discharge_kw": round(h["btm_battery_discharge_kw"], 3),
+                    "btm_battery_soc": h["btm_battery_soc"],
+                    "feeder_export_surplus_kw": round(h["feeder_export_surplus_kw"], 4),
+                    "feeder_import_deficit_kw": round(h["feeder_import_deficit_kw"], 4),
+                }
+                for h in hh_results
+            ],
+        }
+

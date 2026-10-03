@@ -533,3 +533,143 @@ export default function GridReliabilityView() {
               </h3>
               <p className="text-[10.5px] text-slate-500">
                 Storage dispatch and flexible load shifting shave peak utility import
+              </p>
+            </div>
+            <TrendingDown className="h-4 w-4 text-emerald-600" />
+          </div>
+
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                <YAxis tick={{ fontSize: 10 }} stroke="#94a3b8" unit="kW" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', fontSize: '11px', borderRadius: '8px' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
+                <Bar dataKey="baselineImport" name="Unoptimized Import (kW)" fill="#cbd5e1" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="optimizedImport" name="Optimized Import (kW)" fill="#10b981" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 4: Community Battery SOC with Reserve Floor */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Community ESS State of Charge (%) & Reserve Floor
+              </h3>
+              <p className="text-[10.5px] text-slate-500">
+                Guarding 20% emergency reserve floor while buffering solar surplus and deficits
+              </p>
+            </div>
+            <BatteryCharging className="h-4 w-4 text-emerald-600" />
+          </div>
+
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="#94a3b8" unit="%" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', fontSize: '11px', borderRadius: '8px' }}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
+                <ReferenceLine y={reserveFloor} stroke="#f43f5e" strokeDasharray="4 4" label={{ value: `Reserve ${reserveFloor}%`, fill: '#e11d48', fontSize: 10 }} />
+                <Line
+                  type="monotone"
+                  dataKey="batterySoc"
+                  name="Battery SOC (%)"
+                  stroke="#059669"
+                  strokeWidth={2.5}
+                  dot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Section C: Action Panel (DER Dispatch & Recommendations) */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+          <div className="flex items-center space-x-2">
+            <Zap className="h-4 w-4 text-emerald-600" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Feasible DER Dispatch & Load Recommendations
+            </h2>
+          </div>
+          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            {recommendations.length} Coordinated Actions Generated
+          </span>
+        </div>
+
+        {recommendations.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-500">
+            No dispatch actions required. Feeder is balanced.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  <th className="py-2 px-3">Interval</th>
+                  <th className="py-2 px-3">Recommended Action</th>
+                  <th className="py-2 px-3">Power / Energy</th>
+                  <th className="py-2 px-3">Financial Benefit</th>
+                  <th className="py-2 px-3">Technical Reason & Constraints Verified</th>
+                  <th className="py-2 px-3">Load Safety</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {recommendations.map((rec, i) => {
+                  let badgeColor = 'bg-slate-100 text-slate-800 border-slate-200';
+                  if (rec.action_type === 'CHARGE_COMMUNITY_ESS') badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                  if (rec.action_type === 'DISCHARGE_COMMUNITY_ESS') badgeColor = 'bg-teal-50 text-teal-800 border-teal-200';
+                  if (rec.action_type === 'SHIFT_FLEXIBLE_LOAD') badgeColor = 'bg-purple-50 text-purple-800 border-purple-200';
+                  if (rec.action_type === 'P2P_LOCAL_MATCH') badgeColor = 'bg-blue-50 text-blue-800 border-blue-200';
+                  if (rec.action_type === 'IMPORT_GRID') badgeColor = 'bg-amber-50 text-amber-800 border-amber-200';
+                  if (rec.action_type === 'EXPORT_GRID') badgeColor = 'bg-indigo-50 text-indigo-800 border-indigo-200';
+
+                  return (
+                    <tr key={i} className="hover:bg-slate-50/60 transition">
+                      <td className="py-2.5 px-3 font-mono font-medium text-slate-700 whitespace-nowrap">
+                        {rec.interval}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className={`inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold ${badgeColor}`}>
+                          {rec.action_type.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-slate-900 whitespace-nowrap">
+                        {rec.target_power_kw} kW <span className="text-[10px] text-slate-400">({rec.energy_kwh} kWh)</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-emerald-700 font-semibold whitespace-nowrap">
+                        +₹{rec.financial_impact_inr?.toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 max-w-md">
+                        <p className="font-medium text-slate-800">{rec.reason}</p>
+                        {rec.constraints_checked && (
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Constraint: {rec.constraints_checked}
+                          </p>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="flex items-center text-[10.5px] font-bold text-emerald-700">
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" /> Protected
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+

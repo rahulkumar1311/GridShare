@@ -370,3 +370,19 @@ class FeederForecastOptimizerService:
                                     "essential_load_protected": True,
                                     "forecast_uncertainty_kw": iv["aggregate_uncertainty_kw"],
                                 })
+
+                    # Step B4: Grid Import for Residual Deficit
+                    if rem_deficit > 0.001:
+                        grid_import_kw = min(rem_deficit, max_transformer_kw)
+                        unmet_shortfall_kw = max(0.0, rem_deficit - grid_import_kw)
+                        total_grid_imported_kwh += grid_import_kw * dt
+
+                        recommendations.append({
+                            "interval": t_label,
+                            "step_index": t,
+                            "action_type": "IMPORT_GRID",
+                            "target_power_kw": grid_import_kw,
+                            "energy_kwh": round(grid_import_kw * dt, 3),
+                            "reason": f"Supplying remaining deficit of {grid_import_kw} kW from main utility grid.",
+                            "financial_impact_inr": round(grid_import_kw * dt * tariff_in, 2),
+                            "financial_benefit_description": f"Utility grid tariff ₹{tariff_in:.2f}/kWh.",

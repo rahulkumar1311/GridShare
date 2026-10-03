@@ -508,3 +508,89 @@ class FeederSimulationEngine:
             ],
         }
 
+    def simulate_horizon(
+        self,
+        start_hour: float = 0.0,
+        horizon_steps: int = 24,
+        step_duration_hours: float = 1.0,
+        weather_scenario: str = "NORMAL",
+        grid_available: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Simulate sequential time series (e.g. 24 hours).
+        State of charge dynamically propagates across time steps.
+        """
+        results = []
+        cumulative_import_kwh = 0.0
+        cumulative_export_kwh = 0.0
+        cumulative_gen_kwh = 0.0
+        cumulative_demand_kwh = 0.0
+        cumulative_p2p_kwh = 0.0
+        cumulative_unmet_kwh = 0.0
+        cumulative_cost_inr = 0.0
+
+        for step in range(horizon_steps):
+            current_hour = (start_hour + step * step_duration_hours) % 24.0
+
+            if weather_scenario == "HIGH_SOLAR":
+                irr = 1.25
+            elif weather_scenario == "CLOUDY_INTERMITTENT":
+                irr = 0.35 if (11.0 <= current_hour <= 14.0) else 0.85
+            elif weather_scenario == "MONSOON_STORM":
+                irr = 0.20
+            else:
+                irr = 1.0
+
+            if 18.0 <= current_hour <= 22.0:
+                step_import_tariff = self.config.grid_import_tariff_per_kwh + 2.40
+            else:
+                step_import_tariff = self.config.grid_import_tariff_per_kwh
+
+            step_res = self.simulate_step(
+                step_index=step,
+                hour_of_day=current_hour,
+                duration_hours=step_duration_hours,
+                solar_irradiance_factor=irr,
+                grid_available=grid_available,
+                import_tariff_override=step_import_tariff,
+            )
+            results.append(step_res)
+
+            cumulative_import_kwh += step_res["aggregate_energy_kwh"]["grid_import_kwh"]
+            cumulative_export_kwh += step_res["aggregate_energy_kwh"]["grid_export_kwh"]
+            cumulative_gen_kwh += step_res["aggregate_energy_kwh"]["solar_generation_kwh"]
+            cumulative_demand_kwh += step_res["aggregate_energy_kwh"]["demand_kwh"]
+            cumulative_p2p_kwh += step_res["aggregate_energy_kwh"]["p2p_traded_kwh"]
+            cumulative_unmet_kwh += step_res["aggregate_energy_kwh"]["unmet_demand_kwh"]
+            cumulative_cost_inr += step_res["economics_inr"]["net_community_energy_cost"]
+
+        peak_transformer_loading = max(s["feeder_reliability"]["transformer_loading_pct"] for s in results)
+        min_bus_voltage = min(s["feeder_reliability"]["bus_voltage_pu"] for s in results)
+        max_bus_voltage = max(s["feeder_reliability"]["bus_voltage_pu"] for s in results)
+
+        return {
+            "status": "SUCCESS",
+            "feeder_id": self.config.id,
+            "feeder_name": self.config.name,
+            "horizon_steps": horizon_steps,
+            "step_duration_hours": step_duration_hours,
+            "weather_scenario": weather_scenario,
+            "grid_status": "ONLINE" if grid_available else "ISLANDED",
+            "cumulative_totals": {
+                "total_demand_kwh": round(cumulative_demand_kwh, 3),
+                "total_generation_kwh": round(cumulative_gen_kwh, 3),
+                "total_p2p_traded_kwh": round(cumulative_p2p_kwh, 3),
+                "total_grid_import_kwh": round(cumulative_import_kwh, 3),
+                "total_grid_export_kwh": round(cumulative_export_kwh, 3),
+                "total_unmet_kwh": round(cumulative_unmet_kwh, 3),
+                "total_net_energy_cost_inr": round(cumulative_cost_inr, 2),
+            },
+            "reliability_summary": {
+                "peak_transformer_loading_pct": peak_transformer_loading,
+                "min_bus_voltage_pu": min_bus_voltage,
+                "max_bus_voltage_pu": max_bus_voltage,
+                "voltage_compliance": (min_bus_voltage >= 0.95 and max_bus_voltage <= 1.05),
+                "transformer_overloaded": peak_transformer_loading > 100.0,
+            },
+            "steps": results,
+        }

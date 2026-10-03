@@ -108,3 +108,78 @@ class FeederEvaluationService:
             battery_capacity_kwh=50.0,
             battery_reserve_pct=20.0,
             transformer_capacity_kva=50.0,
+        )
+
+        # Scenario 5: High demand with constrained battery capacity
+        s5 = ScenarioDefinition(
+            scenario_id="scenario_5_constrained_battery",
+            name="5. High Demand & Constrained Battery",
+            description="Feeder demand doubled (2.2x), coupled with severely downsized community battery (15 kWh capacity, 5 kW inverter).",
+            solar_multiplier=1.0,
+            demand_multiplier=2.2,
+            initial_battery_soc=50.0,
+            battery_capacity_kwh=15.0,
+            battery_max_power_kw=5.0,
+            transformer_capacity_kva=50.0,
+        )
+
+        # Scenario 6: Insufficient resources with remaining unmet demand
+        s6 = ScenarioDefinition(
+            scenario_id="scenario_6_unmet_demand",
+            name="6. Insufficient Resources (Unmet Demand)",
+            description="Zero solar (night storm), 3.5x demand overload, depleted battery (20% SOC), and constrained 30 kVA transformer.",
+            solar_multiplier=0.0,
+            demand_multiplier=3.5,
+            initial_battery_soc=20.0,
+            battery_capacity_kwh=50.0,
+            battery_reserve_pct=20.0,
+            transformer_capacity_kva=30.0,  # 28.5 kW active limit
+        )
+
+        return [s1, s2, s3, s4, s5, s6]
+
+    @classmethod
+    def generate_input_series(
+        cls,
+        scenario: ScenarioDefinition,
+        households: List[HouseholdNodeConfig],
+    ) -> List[Dict[str, Any]]:
+        """
+        Generates identical, deterministic input time-series for a scenario.
+        Both Baseline and GridShare receive this exact identical sequence.
+        """
+        time_series = []
+        dt = scenario.step_duration_hours
+
+        for step in range(scenario.duration_hours):
+            hour = (step * dt) % 24.0
+
+            # Solar irradiance factor
+            if scenario.hourly_solar_factors is not None and step < len(scenario.hourly_solar_factors):
+                irr = scenario.hourly_solar_factors[step]
+            else:
+                irr = scenario.solar_multiplier
+
+            # Diurnal solar shape
+            if 6.0 <= hour <= 18.0:
+                diurnal_solar = math.sin(math.pi * (hour - 6.0) / 12.0)
+            else:
+                diurnal_solar = 0.0
+
+            # Demand multiplier
+            if scenario.hourly_demand_factors is not None and step < len(scenario.hourly_demand_factors):
+                d_mult = scenario.hourly_demand_factors[step] * scenario.demand_multiplier
+            else:
+                d_mult = scenario.demand_multiplier
+
+            # TOU Tariff structure
+            is_peak = (18.0 <= hour <= 22.0)
+            import_tariff = 8.50 if is_peak else 6.10
+            export_tariff = 3.50
+
+            hh_inputs = []
+            total_solar_kw = 0.0
+            total_essential_kw = 0.0
+            total_flexible_kw = 0.0
+
+            for h in households:

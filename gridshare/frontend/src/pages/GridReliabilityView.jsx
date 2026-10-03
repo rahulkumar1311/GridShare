@@ -713,3 +713,93 @@ export default function GridReliabilityView() {
                     key={sc.scenario.id}
                     onClick={() => setSelectedScenarioIdx(idx)}
                     className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
+                      isSelected
+                        ? 'bg-indigo-600 text-white shadow-xs font-semibold'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {sc.scenario.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Selected Scenario Details & Comparison */}
+        {evaluationData?.scenario_results?.[selectedScenarioIdx] && (() => {
+          const currentEval = evaluationData.scenario_results[selectedScenarioIdx];
+          const scMeta = currentEval.scenario;
+          const comp = currentEval.comparison;
+          const bm = currentEval.baseline.metrics;
+          const gm = currentEval.gridshare.metrics;
+
+          // Chart data for Baseline vs GridShare comparison
+          const comparisonChartData = [
+            {
+              metric: 'Peak Import (kW)',
+              Baseline: bm.peak_grid_import_kw,
+              GridShare: gm.peak_grid_import_kw,
+            },
+            {
+              metric: 'Total Import (kWh)',
+              Baseline: bm.total_grid_import_kwh,
+              GridShare: gm.total_grid_import_kwh,
+            },
+            {
+              metric: 'Energy Cost (₹/10)',
+              Baseline: Number((bm.estimated_energy_cost_inr / 10).toFixed(1)),
+              GridShare: Number((gm.estimated_energy_cost_inr / 10).toFixed(1)),
+            },
+          ];
+
+          return (
+            <div className="space-y-4">
+              {/* Scenario Context Card */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-slate-800">
+                    Scenario: <span className="text-indigo-700 font-bold">{scMeta.name}</span>
+                  </div>
+                  <div className="flex items-center space-x-3 text-slate-500 font-mono text-[11px]">
+                    <span>Duration: {scMeta.duration_hours}h</span>
+                    <span>Solar: {scMeta.solar_multiplier}x</span>
+                    <span>Demand: {scMeta.demand_multiplier}x</span>
+                    <span>Init SOC: {scMeta.initial_battery_soc}%</span>
+                    <span>XFMR: {scMeta.transformer_capacity_kva} kVA</span>
+                  </div>
+                </div>
+                <p className="text-slate-600 mt-1">{scMeta.description}</p>
+              </div>
+
+              {/* Side-by-side Chart & Table */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                {/* Visual Comparative Bar Chart */}
+                <div className="lg:col-span-5 rounded-lg border border-slate-200 p-3 bg-white">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                    Key Performance Comparison
+                  </h4>
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={comparisonChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="metric" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', borderRadius: '8px', fontSize: '11px' }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '11px' }} />
+                        <Bar dataKey="Baseline" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="GridShare" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[10px] text-slate-400 text-center mt-1">
+                    *Energy Cost shown scaled (₹/10) for clear multi-axis visualization.
+                  </p>
+                </div>
+
+                {/* 10-Metric Comprehensive Comparison Table */}
+                <div className="lg:col-span-7 overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[10.5px] uppercase font-bold text-slate-500 border-b border-slate-200">

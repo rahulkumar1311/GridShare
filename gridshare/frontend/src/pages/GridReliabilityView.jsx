@@ -803,3 +803,136 @@ export default function GridReliabilityView() {
                 <div className="lg:col-span-7 overflow-x-auto rounded-lg border border-slate-200">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-50 text-[10.5px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">Metric</th>
+                        <th className="py-2 px-2.5">Baseline</th>
+                        <th className="py-2 px-2.5">GridShare</th>
+                        <th className="py-2 px-2.5">Delta</th>
+                        <th className="py-2 px-2.5">% Change</th>
+                        <th className="py-2 px-2.5">Verdict</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700 font-mono text-[11px]">
+                      {Object.entries(comp).map(([key, item]) => {
+                        const isImproved = item.verdict === 'IMPROVED';
+                        const isEqual = item.verdict === 'EQUAL';
+                        const isDegraded = item.verdict === 'DEGRADED';
+
+                        const friendlyName = key
+                          .replace(/_/g, ' ')
+                          .replace('kw', '(kW)')
+                          .replace('kwh', '(kWh)')
+                          .replace('inr', '(₹)')
+                          .replace('pct', '(%)');
+
+                        return (
+                          <tr key={key} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="py-1.5 px-3 font-medium text-slate-900 capitalize font-sans">
+                              {friendlyName}
+                            </td>
+                            <td className="py-1.5 px-2.5 text-slate-600">
+                              {item.baseline} {item.unit}
+                            </td>
+                            <td className="py-1.5 px-2.5 font-bold text-indigo-700">
+                              {item.gridshare} {item.unit}
+                            </td>
+                            <td className="py-1.5 px-2.5 text-slate-700">
+                              {item.abs_diff > 0 ? `+${item.abs_diff}` : item.abs_diff}
+                            </td>
+                            <td className="py-1.5 px-2.5">
+                              {item.pct_change !== null ? (
+                                <span className={isImproved ? 'text-emerald-700 font-semibold' : isDegraded ? 'text-amber-700' : 'text-slate-500'}>
+                                  {item.pct_change > 0 ? `+${item.pct_change}%` : `${item.pct_change}%`}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">N/A</span>
+                              )}
+                            </td>
+                            <td className="py-1.5 px-2.5 font-sans">
+                              <span
+                                className={`inline-block rounded px-1.5 py-0.5 text-[9.5px] font-bold ${
+                                  isImproved
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : isEqual
+                                    ? 'bg-slate-100 text-slate-600'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {item.verdict}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Metric Definitions & Formulas Accordion/Note */}
+              <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-[11px] text-slate-600 space-y-1">
+                <div className="font-bold text-slate-800 mb-1 flex items-center space-x-1.5">
+                  <Info className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Metric Definitions & Denominator Handling:</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                  <div>
+                    <span className="font-semibold text-slate-700">• Renewable Self-Consumption Ratio:</span> Defined as <code className="text-[10px] bg-white px-1 py-0.5 rounded border border-slate-200">Σ min(Solar, Demand+Charge) / Σ Solar</code>. Zero-denominator guarded: safely returns 0.0 when solar generation is 0 (Scenario 6).
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-700">• Peak Grid Import:</span> Instantaneous maximum feeder draw at the substation transformer. Reductions denote effective peak shaving.
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-700">• Essential-Load Violations:</span> Count of intervals where non-deferrable base load was cut. GridShare maintains 0 violations even when total resources are insufficient.
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-700">• Energy Conservation Residual:</span> Enforces <code className="text-[10px] bg-white px-1 py-0.5 rounded border border-slate-200">|Σ Sources - Σ Sinks| &lt; 10⁻⁶ kW</code> across all time steps.
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* 6. Section E: Trust, Assumptions & Model Transparency */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-xs text-xs">
+        <div className="flex items-center space-x-2 border-b border-slate-200 pb-2 mb-3">
+          <Info className="h-4 w-4 text-indigo-600" />
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+            Model Assumptions & Feeder Simulation Disclosures
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-slate-600">
+          <div>
+            <h4 className="font-bold text-slate-900 text-[11px] mb-1">🧠 ML Demand Forecasting</h4>
+            <p className="text-[11px] leading-relaxed">
+              Trained 100-tree <span className="font-mono text-indigo-700">RandomForestRegressor</span> predicting 1h–24h multi-step loads. Uncertainty (±σ) is empirically derived from the variance across ensemble trees.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-slate-900 text-[11px] mb-1">⚡ Electrical Feeder Physics</h4>
+            <p className="text-[11px] leading-relaxed">
+              Power flow uses single-phase LinDistFlow voltage approximations. Distribution transformer rated at 50 kVA (47.5 kW active limit @ 0.95 PF). Total sources strictly balance total sinks.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-slate-900 text-[11px] mb-1">🛡️ Essential Load Safeguard</h4>
+            <p className="text-[11px] leading-relaxed">
+              Critical base loads (medical, refrigeration, routing) are strictly non-sheddable. Only flexible loads (EV charging, laundry) participate in demand shifting. Essential demand is never curtailed.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between text-[10.5px] text-slate-500 font-mono">
+          <span>Tariffs: Import ₹6.10/kWh (₹8.50 Peak) | Export ₹3.50/kWh | P2P ₹4.50/kWh</span>
+          <span>Time-Step: Δt = 1.0 hour (kWh = kW × 1.0)</span>
+          <span>Storage: 95% Charge / 95% Discharge Efficiency (90.25% Roundtrip)</span>
+        </div>
+      </div>
+    </div>
+  );
+}

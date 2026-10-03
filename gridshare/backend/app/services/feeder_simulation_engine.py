@@ -109,3 +109,23 @@ class HouseholdNodeConfig:
     btm_battery_max_power_kw: float = 3.0
 
 
+@dataclass
+class FeederConfig:
+    id: str = "feeder_substation_01"
+    name: str = "Green Enclave Feeder"
+    transformer_capacity_kva: float = 50.0
+    power_factor: float = 0.95
+    nominal_voltage_v: float = 230.0
+    line_resistance_ohms: float = 0.08
+    line_reactance_ohms: float = 0.04
+    grid_import_tariff_per_kwh: float = 6.10
+    grid_export_feedin_per_kwh: float = 3.50
+    p2p_clearing_tariff_per_kwh: float = 4.50
+    unmet_demand_penalty_per_kwh: float = 25.00
+    allow_flexible_load_shedding: bool = True
+    community_battery_capacity_kwh: float = 50.0
+    community_battery_initial_soc: float = 40.0
+    community_battery_reserve_pct: float = 20.0
+    community_battery_max_power_kw: float = 15.0
+
+

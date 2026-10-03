@@ -391,3 +391,29 @@ class FeederSimulationEngine:
         feeder_bus_voltage_v = self.config.nominal_voltage_v - delta_v_volts
         voltage_pu = feeder_bus_voltage_v / self.config.nominal_voltage_v
 
+        # Step 7: Energy Conversion (kWh = kW * dt)
+        energy_gen_kwh = total_gen_kw * dt
+        energy_demand_kwh = total_demand_req_kw * dt
+        energy_demand_served_kwh = demand_served_kw * dt
+        energy_unmet_kwh = unmet_demand_kw * dt
+        energy_grid_import_kwh = grid_import_kw * dt
+        energy_grid_export_kwh = grid_export_kw * dt
+        energy_p2p_kwh = p2p_cleared_kw * dt
+        energy_curtailed_kwh = curtailed_solar_kw * dt
+
+        # Step 8: Strict Energy Conservation Audit
+        total_sources_kw = (
+            total_gen_kw +
+            sum(h["btm_battery_discharge_kw"] for h in hh_results) +
+            comm_discharge_kw +
+            grid_import_kw
+        )
+        total_sinks_kw = (
+            demand_served_kw +
+            sum(h["btm_battery_charge_kw"] for h in hh_results) +
+            comm_charge_kw +
+            grid_export_kw +
+            curtailed_solar_kw
+        )
+        power_balance_error_kw = abs(total_sources_kw - total_sinks_kw)
+

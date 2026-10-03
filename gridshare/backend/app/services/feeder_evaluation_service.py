@@ -528,3 +528,88 @@ class FeederEvaluationService:
         return {
             "strategy": "GRIDSHARE",
             "description": "Forecast-driven coordination with flexible load shifting and predictive battery dispatch.",
+            "metrics": metrics,
+            "steps": steps_output,
+        }
+
+    @classmethod
+    def _calculate_strategy_metrics(
+        cls,
+        steps: List[Dict[str, Any]],
+        dt: float,
+        runtime_ms: float,
+    ) -> Dict[str, Any]:
+        """
+        Calculates all 11 required evaluation metrics with explicit formulas
+        and zero-division safety.
+        """
+        peak_grid_import_kw = max(s["grid_import_kw"] for s in steps)
+        total_grid_import_kwh = sum(s["grid_import_kw"] * dt for s in steps)
+        total_unmet_demand_kwh = sum(s["unmet_demand_kw"] * dt for s in steps)
+        unmet_demand_intervals = sum(1 for s in steps if s["unmet_demand_kw"] > 1e-4)
+        estimated_energy_cost_inr = sum(s["energy_cost_inr"] for s in steps)
+
+        total_solar_generated_kwh = sum(s["total_solar_kw"] * dt for s in steps)
+        total_renewable_self_consumed_kwh = sum(s["renewable_self_consumed_kw"] * dt for s in steps)
+        total_curtailed_solar_kwh = sum(s["curtailed_solar_kw"] * dt for s in steps)
+
+        # Renewable Self-Consumption Ratio: (Solar used locally) / (Total solar generated)
+        # Safe zero denominator handling:
+        if total_solar_generated_kwh > 1e-6:
+            renewable_self_consumption_ratio = total_renewable_self_consumed_kwh / total_solar_generated_kwh
+        else:
+            renewable_self_consumption_ratio = 0.0
+
+        battery_reserve_violations = sum(1 for s in steps if s["reserve_violated"])
+        essential_load_violations = sum(1 for s in steps if s["essential_violated"])
+        energy_balance_residual_max = max(s["balance_residual_kw"] for s in steps)
+
+        return {
+            "peak_grid_import_kw": round(peak_grid_import_kw, 4),
+            "total_grid_import_kwh": round(total_grid_import_kwh, 4),
+            "total_unmet_demand_kwh": round(total_unmet_demand_kwh, 4),
+            "unmet_demand_intervals": int(unmet_demand_intervals),
+            "estimated_energy_cost_inr": round(estimated_energy_cost_inr, 2),
+            "renewable_self_consumption_ratio": round(renewable_self_consumption_ratio, 4),
+            "renewable_self_consumption_pct": round(renewable_self_consumption_ratio * 100.0, 2),
+            "total_curtailed_solar_kwh": round(total_curtailed_solar_kwh, 4),
+            "battery_reserve_violations": int(battery_reserve_violations),
+            "essential_load_violations": int(essential_load_violations),
+            "energy_balance_residual_kw": round(energy_balance_residual_max, 8),
+            "simulation_runtime_ms": round(runtime_ms, 3),
+        }
+
+    @classmethod
+    def run_scenario_evaluation(
+        cls,
+        scenario: ScenarioDefinition,
+        households: Optional[List[HouseholdNodeConfig]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Runs both Baseline and GridShare strategies on identical scenario inputs
+        and calculates exact comparative deltas.
+        """
+        hh_configs = households or FeederSimulationEngine._get_default_households()
+        time_series = cls.generate_input_series(scenario, hh_configs)
+
+        baseline_res = cls.simulate_baseline_strategy(scenario, time_series, hh_configs)
+        gridshare_res = cls.simulate_gridshare_strategy(scenario, time_series, hh_configs)
+
+        bm = baseline_res["metrics"]
+        gm = gridshare_res["metrics"]
+
+        # Calculate absolute and relative differences
+        # For cost and peak import: negative delta means GridShare reduced the metric (improvement)
+        comparison = {}
+        metric_keys = [
+            ("peak_grid_import_kw", "kW", "lower_is_better"),
+            ("total_grid_import_kwh", "kWh", "lower_is_better"),
+            ("total_unmet_demand_kwh", "kWh", "lower_is_better"),
+            ("unmet_demand_intervals", "intervals", "lower_is_better"),
+            ("estimated_energy_cost_inr", "INR", "lower_is_better"),
+            ("renewable_self_consumption_ratio", "ratio", "higher_is_better"),
+            ("total_curtailed_solar_kwh", "kWh", "lower_is_better"),
+            ("battery_reserve_violations", "count", "lower_is_better"),
+            ("essential_load_violations", "count", "lower_is_better"),
+            ("energy_balance_residual_kw", "kW", "lower_is_better"),
+        ]

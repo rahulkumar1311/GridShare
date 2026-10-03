@@ -227,3 +227,66 @@ class FeederSimulationEngine:
             ),
         ]
 
+    def simulate_step(
+        self,
+        step_index: int = 0,
+        hour_of_day: float = 12.0,
+        duration_hours: float = 1.0,
+        solar_irradiance_factor: float = 1.0,
+        load_multiplier: float = 1.0,
+        grid_available: bool = True,
+        import_tariff_override: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute single deterministic time-step for the entire feeder.
+        Enforces strict conservation, transformer limits, and unit consistency.
+        """
+        dt = max(0.001, float(duration_hours))
+        hour = float(hour_of_day) % 24.0
+        irr = max(0.0, float(solar_irradiance_factor))
+        load_mult = max(0.1, float(load_multiplier))
+
+        import_tariff = import_tariff_override if import_tariff_override is not None else self.config.grid_import_tariff_per_kwh
+        export_tariff = self.config.grid_export_feedin_per_kwh
+        p2p_tariff = self.config.p2p_clearing_tariff_per_kwh
+        unmet_penalty = self.config.unmet_demand_penalty_per_kwh
+
+        # Step 1: Compute raw solar & load per household
+        if 6.0 <= hour <= 18.0:
+            solar_shape = math.sin(math.pi * (hour - 6.0) / 12.0)
+        else:
+            solar_shape = 0.0
+
+        hh_results = []
+        total_gen_kw = 0.0
+        total_essential_req_kw = 0.0
+        total_flexible_req_kw = 0.0
+        total_demand_req_kw = 0.0
+
+        for h in self.households_config:
+            gen_kw = h.solar_capacity_kw * solar_shape * irr
+            ess_kw = h.base_essential_kw * load_mult
+            flex_kw = h.base_flexible_kw * load_mult
+            dem_kw = ess_kw + flex_kw
+
+            total_gen_kw += gen_kw
+            total_essential_req_kw += ess_kw
+            total_flexible_req_kw += flex_kw
+            total_demand_req_kw += dem_kw
+
+            hh_results.append({
+                "household_id": h.id,
+                "household_name": h.name,
+                "generation_kw": gen_kw,
+                "essential_demand_kw": ess_kw,
+                "flexible_demand_kw": flex_kw,
+                "total_demand_kw": dem_kw,
+                "solar_self_consumed_kw": 0.0,
+                "btm_battery_charge_kw": 0.0,
+                "btm_battery_discharge_kw": 0.0,
+                "btm_battery_soc": 0.0,
+                "feeder_export_surplus_kw": 0.0,
+                "feeder_import_deficit_kw": 0.0,
+                "unmet_demand_kw": 0.0,
+            })
+

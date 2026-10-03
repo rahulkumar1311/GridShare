@@ -290,3 +290,42 @@ class FeederSimulationEngine:
                 "unmet_demand_kw": 0.0,
             })
 
+        # Step 2: Household Behind-the-Meter (BTM) Self-Balancing
+        feeder_surplus_pool_kw = 0.0
+        feeder_deficit_pool_kw = 0.0
+
+        for idx, h_res in enumerate(hh_results):
+            hid = h_res["household_id"]
+            gen = h_res["generation_kw"]
+            tot_dem = h_res["total_demand_kw"]
+            btm = self.btm_batteries.get(hid)
+
+            # Local solar supplies local demand first
+            solar_used = min(gen, tot_dem)
+            h_res["solar_self_consumed_kw"] = solar_used
+            rem_gen = gen - solar_used
+            rem_dem = tot_dem - solar_used
+
+            btm_ch_kw = 0.0
+            btm_dis_kw = 0.0
+
+            if rem_gen > 1e-9 and btm is not None:
+                ch_p, _, _ = btm.charge(rem_gen, dt)
+                btm_ch_kw = ch_p
+                rem_gen -= ch_p
+            elif rem_dem > 1e-9 and btm is not None:
+                dis_p, _, _ = btm.discharge(rem_dem, dt)
+                btm_dis_kw = dis_p
+                rem_dem -= dis_p
+
+            h_res["btm_battery_charge_kw"] = btm_ch_kw
+            h_res["btm_battery_discharge_kw"] = btm_dis_kw
+            h_res["btm_battery_soc"] = btm.soc_pct if btm else None
+
+            # Exchange offered to the neighbourhood feeder
+            h_res["feeder_export_surplus_kw"] = rem_gen
+            h_res["feeder_import_deficit_kw"] = rem_dem
+
+            feeder_surplus_pool_kw += rem_gen
+            feeder_deficit_pool_kw += rem_dem
+

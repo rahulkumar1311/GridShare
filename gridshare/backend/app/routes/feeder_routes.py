@@ -113,3 +113,25 @@ def get_feeder_forecast():
         horizon = 6
     horizon = max(1, min(24, horizon))
 
+    forecasts = FeederForecastOptimizerService.get_feeder_forecasts(horizon_hours=horizon)
+    serialized = {hid: {"household_name": val["config"].name, "steps": val["steps"]} for hid, val in forecasts.items()}
+    return jsonify({"status": "SUCCESS", "horizon_hours": horizon, "forecasts": serialized}), 200
+
+@feeder_bp.route("/api/feeder/optimize-forecast", methods=["POST"])
+def optimize_feeder_forecast():
+    """
+    Executes multi-interval feeder optimization using Random Forest load & solar predictions.
+    Detects shortfalls, schedules community ESS, coordinates P2P, shifts flexible load,
+    and protects essential loads.
+    """
+    from gridshare.backend.app.services.feeder_optimizer_service import FeederForecastOptimizerService
+    data = request.get_json(silent=True) or {}
+    try:
+        horizon = int(data.get("horizon_hours", 6))
+    except (ValueError, TypeError):
+        horizon = 6
+    try:
+        initial_soc = float(data.get("initial_battery_soc", 40.0))
+    except (ValueError, TypeError):
+        initial_soc = 40.0
+    try:

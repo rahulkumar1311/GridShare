@@ -168,3 +168,101 @@ class TestChallenge03Audit(unittest.TestCase):
     def test_07_flexible_loads_and_no_double_allocation(self):
         opt = FeederForecastOptimizerService.optimize_feeder_horizon(
             horizon_hours=12,
+            allow_flexible_load_shift=True,
+        )
+        kpis = opt["kpi_summary"]
+        self.assertGreaterEqual(kpis["total_shifted_flexible_load_kwh"], 0.0)
+        # Shifted load actions must be recorded with valid destination intervals
+        shift_actions = [r for r in opt["recommendations"] if r["action_type"] == "SHIFT_FLEXIBLE_LOAD"]
+        for action in shift_actions:
+            self.assertIn("destination_interval", action)
+            self.assertGreater(action["target_power_kw"], 0.0)
+
+    # 8. Essential loads that cannot be shifted
+    def test_08_essential_loads_cannot_be_shifted(self):
+        opt = FeederForecastOptimizerService.optimize_feeder_horizon(
+            horizon_hours=6,
+            allow_flexible_load_shift=True,
+        )
+        for iv in opt["schedule_by_interval"]:
+            # Essential demand must remain untouched by shifting
+            self.assertGreater(iv["forecast_essential_demand_kw"], 0.0)
+            self.assertTrue(iv["essential_demand_fully_served"])
+
+    # 9. Time-step boundaries and energy-unit conversion
+    def test_09_time_step_energy_unit_conversion(self):
+        engine = FeederSimulationEngine()
+        # Test half-hour step (dt = 0.5)
+        step_half = engine.simulate_step(
+            hour_of_day=12.0,
+            duration_hours=0.5,
+            solar_irradiance_factor=1.0,
+        )
+        p_gen = step_half["aggregate_power_kw"]["total_solar_generation_kw"]
+        e_gen = step_half["aggregate_energy_kwh"]["solar_generation_kwh"]
+        # Energy must equal Power * dt
+        self.assertAlmostEqual(e_gen, p_gen * 0.5, places=4)
+
+    # 10. Impossible or negative energy states
+    def test_10_impossible_negative_energy_states(self):
+        # Test battery initialized with negative SOC and negative capacity
+        battery = BatteryState(
+            id="neg_batt",
+            capacity_kwh=-50.0,
+            current_energy_kwh=-20.0,
+            min_reserve_pct=-10.0,
+        )
+        # Must be clamped to physical minimums
+        self.assertGreater(battery.capacity_kwh, 0.0)
+        self.assertGreaterEqual(battery.current_energy_kwh, 0.0)
+        self.assertGreaterEqual(battery.min_reserve_pct, 0.0)
+
+        # Test discharge when battery starts below reserve floor:
+        # It must NOT artificially inject energy (the bug we caught and fixed)
+        sub_battery = BatteryState(
+            id="sub_reserve",
+            capacity_kwh=100.0,
+            current_energy_kwh=10.0,  # Below 20% floor
+            min_reserve_pct=20.0,
+        )
+        sub_battery.discharge(target_power_kw=10.0, duration_hours=1.0)
+        # Must NOT jump to 20 kWh!
+        self.assertEqual(sub_battery.current_energy_kwh, 10.0)
+
+    # 11. Identical inputs producing identical outputs
+    def test_11_deterministic_repeatability(self):
+        scenarios = FeederEvaluationService.get_standard_scenarios()
+        s3 = [s for s in scenarios if s.scenario_id == "scenario_3_evening_peak"][0]
+        res1 = FeederEvaluationService.run_scenario_evaluation(s3)
+        res2 = FeederEvaluationService.run_scenario_evaluation(s3)
+
+        self.assertEqual(res1["comparison"], res2["comparison"])
+
+    # 12. Existing GridShare routes and features still working
+    def test_12_existing_routes_functioning(self):
+        # Health check
+        res = self.client.get("/api/health")
+        self.assertEqual(res.status_code, 200)
+
+        # Optimization route (fixed alias)
+        res = self.client.post("/api/optimize", json={"weights": {"cost": 0.5, "battery_health": 0.5}})
+        self.assertIn(res.status_code, [200, 201])
+
+        # Marketplace offers
+        res = self.client.get("/api/market/offers")
+        self.assertEqual(res.status_code, 200)
+
+        # Battery status
+        res = self.client.get("/api/battery")
+        self.assertEqual(res.status_code, 200)
+
+        # Feeder endpoints
+        res = self.client.get("/api/feeder/status")
+        self.assertEqual(res.status_code, 200)
+
+        res = self.client.get("/api/feeder/evaluation")
+        self.assertEqual(res.status_code, 200)
+
+
+if __name__ == "__main__":
+    unittest.main()
